@@ -201,13 +201,19 @@ export function deploymentManifest(
     },
   ];
 
+  const useProxy = shouldUseLitellmProxy(config);
+  const useOtel = shouldUseOtel(config);
+  // Direct sidecar only when OTEL is enabled and operator is NOT handling it
+  const useOtelDirect = useOtel && !otelViaOperator;
+
   const optionalKeys = [
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
     "MODEL_ENDPOINT",
     "TELEGRAM_BOT_TOKEN",
-    "GOOGLE_CLOUD_PROJECT",
-    "GOOGLE_CLOUD_LOCATION",
+    // In proxy mode LiteLLM gets project/location from its config.yaml;
+    // the gateway doesn't need them.
+    ...(!useProxy ? ["GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"] : []),
     "SSH_IDENTITY",
     "SSH_CERTIFICATE",
     "SSH_KNOWN_HOSTS",
@@ -218,11 +224,6 @@ export function deploymentManifest(
       valueFrom: { secretKeyRef: { name: "openclaw-secrets", key, optional: true } },
     });
   }
-
-  const useProxy = shouldUseLitellmProxy(config);
-  const useOtel = shouldUseOtel(config);
-  // Direct sidecar only when OTEL is enabled and operator is NOT handling it
-  const useOtelDirect = useOtel && !otelViaOperator;
 
   // OTEL collector env vars (tell the agent where to send traces)
   if (useOtel) {
