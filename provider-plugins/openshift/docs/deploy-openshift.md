@@ -6,7 +6,7 @@ For plain Kubernetes deployments (without OAuth proxy, Route, and ServiceAccount
 
 ## Prerequisites
 
-- An OpenShift cluster where you can create a namespace (no cluster-admin required)
+- An OpenShift cluster: either permission to create namespaces/projects, or a pre-created project where you have admin (or equivalent). If you only have namespace-scoped access, set the Project / Namespace field in the deploy form to that existing project.
 - `oc` CLI authenticated (`oc login`) on the machine running the installer
 - An API key or GCP service account for at least one model provider
 
@@ -25,6 +25,8 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. If the cluster is OpenShift, the plugin auto-detects it and deploys with OAuth proxy support.
+
+If you only have access to an existing project, enter that exact project name in the Project / Namespace field. The installer skips cluster-level namespace creation when the API returns `Forbidden` on namespace checks.
 
 ## What Gets Created
 

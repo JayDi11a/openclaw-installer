@@ -122,7 +122,7 @@ podman run -d --name claw-installer \
   -v ~/.openclaw:/home/node/.openclaw:ro,Z \
   -v ~/.openclaw/installer:/home/node/.openclaw/installer:Z \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-  quay.io/sallyom/claw-installer:latest
+  quay.io/sallyom/openclaw-installer:latest
 
 # Docker (any platform)
 docker run -d --name claw-installer \
@@ -131,11 +131,11 @@ docker run -d --name claw-installer \
   -v ~/.openclaw:/home/node/.openclaw:ro \
   -v ~/.openclaw/installer:/home/node/.openclaw/installer \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-  quay.io/sallyom/claw-installer:latest
+  quay.io/sallyom/openclaw-installer:latest
 
 # macOS with podman (run from source — socket forwarding not supported)
-git clone https://github.com/sallyom/claw-installer.git
-cd claw-installer && npm install && npm run dev
+git clone https://github.com/sallyom/openclaw-installer.git
+cd openclaw-installer && npm install && npm run dev
 ```
 
 ## Remote Access
