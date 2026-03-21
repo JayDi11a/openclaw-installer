@@ -50,6 +50,7 @@ interface SavedConfig {
 const MODE_ICONS: Record<string, string> = {
   local: "💻",
   kubernetes: "☸️",
+  openshift: "☸️",
   ssh: "🖥️",
 };
 
@@ -207,6 +208,12 @@ export default function DeployForm({ onDeployStarted }: Props) {
 
   const isClusterMode = mode === "kubernetes" || mode === "openshift";
   const isVertex = inferenceProvider === "vertex-anthropic" || inferenceProvider === "vertex-google";
+  const displayedDeployers = useMemo(
+    () => (defaults?.isOpenShift
+      ? deployers.filter((deployer) => deployer.mode !== "kubernetes")
+      : deployers),
+    [defaults?.isOpenShift, deployers],
+  );
 
   // Fetch GCP defaults when a Vertex provider is first selected
   useEffect(() => {
@@ -273,6 +280,12 @@ export default function DeployForm({ onDeployStarted }: Props) {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (defaults?.isOpenShift && mode === "kubernetes") {
+      setMode("openshift");
+    }
+  }, [defaults?.isOpenShift, mode]);
 
   useEffect(() => {
     try {
@@ -715,7 +728,7 @@ export default function DeployForm({ onDeployStarted }: Props) {
     <div>
       {/* Mode selector */}
       <div className="mode-grid">
-        {deployers.map((m) => {
+        {displayedDeployers.map((m) => {
           const isSelected = mode === m.mode;
           return (
             <div
@@ -761,9 +774,13 @@ export default function DeployForm({ onDeployStarted }: Props) {
                 onChange={(e) => {
                   const cfg = savedConfigs.find((c) => c.name === e.target.value);
                   if (cfg) {
-                    setMode(cfg.type === "k8s" ? "kubernetes" : "local");
+                    setMode(cfg.type === "k8s"
+                      ? (defaults?.isOpenShift ? "openshift" : "kubernetes")
+                      : "local");
                     applyVars(cfg.vars);
-                    setLoadedConfigLabel(`${cfg.name} (${cfg.type === "k8s" ? "K8s" : "Local"})`);
+                    setLoadedConfigLabel(`${cfg.name} (${cfg.type === "k8s"
+                      ? (defaults?.isOpenShift ? "OpenShift" : "K8s")
+                      : "Local"})`);
                     setAutoLoadedEnvDir(null);
                   }
                 }}
@@ -870,9 +887,6 @@ export default function DeployForm({ onDeployStarted }: Props) {
           />
           <div className="hint">
             Leave blank for the default image (<code>{defaultImageForProvider(inferenceProvider)}</code>).
-            {inferenceProvider === "vertex-anthropic"
-              ? " This image includes Anthropic Vertex AI support not yet available upstream."
-              : ""}
           </div>
         </div>
 
