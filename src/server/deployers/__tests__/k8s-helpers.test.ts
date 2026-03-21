@@ -52,4 +52,48 @@ describe("model config generation", () => {
 
     expect(deriveModel(config)).toBe("anthropic/claude-sonnet-4-6");
   });
+
+  // Regression tests for #1: normalizeModelRef must use litellm/ prefix when proxy is active
+  it("normalizes vertex-anthropic custom model to litellm/ when proxy is enabled", () => {
+    const config = makeConfig({
+      inferenceProvider: "vertex-anthropic",
+      litellmProxy: true,
+      agentModel: "claude-opus-4-6",
+    });
+
+    expect(normalizeModelRef(config, "claude-opus-4-6")).toBe("litellm/claude-opus-4-6");
+    expect(deriveModel(config)).toBe("litellm/claude-opus-4-6");
+  });
+
+  it("normalizes vertex-google custom model to litellm/ when proxy is enabled", () => {
+    const config = makeConfig({
+      inferenceProvider: "vertex-google",
+      litellmProxy: true,
+      agentModel: "gemini-2.5-pro",
+    });
+
+    expect(normalizeModelRef(config, "gemini-2.5-pro")).toBe("litellm/gemini-2.5-pro");
+    expect(deriveModel(config)).toBe("litellm/gemini-2.5-pro");
+  });
+
+  it("normalizes vertex-anthropic custom model to anthropic-vertex/ when proxy is disabled", () => {
+    const config = makeConfig({
+      inferenceProvider: "vertex-anthropic",
+      litellmProxy: false,
+      agentModel: "claude-opus-4-6",
+    });
+
+    expect(normalizeModelRef(config, "claude-opus-4-6")).toBe("anthropic-vertex/claude-opus-4-6");
+    expect(deriveModel(config)).toBe("anthropic-vertex/claude-opus-4-6");
+  });
+
+  it("passes through model refs that already contain a provider prefix", () => {
+    const config = makeConfig({
+      inferenceProvider: "vertex-anthropic",
+      litellmProxy: true,
+    });
+
+    expect(normalizeModelRef(config, "litellm/my-model")).toBe("litellm/my-model");
+    expect(normalizeModelRef(config, "anthropic-vertex/my-model")).toBe("anthropic-vertex/my-model");
+  });
 });

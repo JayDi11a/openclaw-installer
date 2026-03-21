@@ -465,10 +465,12 @@ function buildRunArgs(
     NODE_ENV: "production",
   };
 
-  if (effectiveConfig.anthropicApiKey) {
+  // Fix for #6: in proxy mode the gateway talks to LiteLLM, not directly
+  // to Anthropic/OpenAI, so don't expose API keys to the gateway.
+  if (!useProxy && effectiveConfig.anthropicApiKey) {
     env.ANTHROPIC_API_KEY = effectiveConfig.anthropicApiKey;
   }
-  if (effectiveConfig.openaiApiKey) {
+  if (!useProxy && effectiveConfig.openaiApiKey) {
     env.OPENAI_API_KEY = effectiveConfig.openaiApiKey;
   }
   if (effectiveConfig.modelEndpoint) {

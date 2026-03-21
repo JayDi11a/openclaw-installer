@@ -1,15 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { deploymentManifest, fileConfigMapManifest, fileTreeConfigMapManifest } from "../k8s-manifests.js";
 import type { DeployConfig } from "../types.js";
+import type * as k8s from "@kubernetes/client-node";
 
-describe("k8s state sync manifests", () => {
-  const config: DeployConfig = {
+function makeConfig(overrides: Partial<DeployConfig> = {}): DeployConfig {
+  return {
     mode: "kubernetes",
     prefix: "openclaw",
     agentName: "alpha",
     agentDisplayName: "Alpha",
     agentModel: "claude-sonnet-4-6",
+    ...overrides,
   };
+}
+
+/** Extract env var names from the gateway container in a deployment manifest. */
+function gatewayEnvNames(deployment: k8s.V1Deployment): string[] {
+  const container = deployment.spec?.template.spec?.containers?.find((c) => c.name === "gateway");
+  return (container?.env ?? []).map((e) => e.name);
+}
+
+describe("k8s state sync manifests", () => {
+  const config: DeployConfig = makeConfig();
 
   it("renders skill and cron ConfigMaps from host state entries", () => {
     const skillsCm = fileTreeConfigMapManifest("openclaw-alpha-openclaw", "openclaw-skills", [
@@ -57,5 +69,52 @@ describe("k8s state sync manifests", () => {
     expect(skillsVolume?.configMap?.items).toEqual([{ key: "f0", path: "briefing-bot/SKILL.md" }]);
     expect(cronVolume?.configMap?.name).toBe("openclaw-cron");
     expect(cronVolume?.configMap?.items).toEqual([{ key: "jobs.json", path: "jobs.json" }]);
+  });
+});
+
+// Regression tests for #6: API keys must not leak to the gateway in proxy mode
+describe("gateway env vars in proxy mode", () => {
+  it("excludes ANTHROPIC_API_KEY and OPENAI_API_KEY when litellm proxy is active", () => {
+    const proxyConfig = makeConfig({
+      inferenceProvider: "vertex-anthropic",
+      litellmProxy: true,
+      anthropicApiKey: "sk-ant-test",
+      openaiApiKey: "sk-oai-test",
+      gcpServiceAccountJson: '{"project_id":"test"}',
+    });
+
+    const deployment = deploymentManifest("ns", proxyConfig);
+    const envNames = gatewayEnvNames(deployment);
+
+    expect(envNames).not.toContain("ANTHROPIC_API_KEY");
+    expect(envNames).not.toContain("OPENAI_API_KEY");
+  });
+
+  it("includes ANTHROPIC_API_KEY and OPENAI_API_KEY when proxy is not active", () => {
+    const directConfig = makeConfig({
+      inferenceProvider: "anthropic",
+      anthropicApiKey: "sk-ant-test",
+      openaiApiKey: "sk-oai-test",
+    });
+
+    const deployment = deploymentManifest("ns", directConfig);
+    const envNames = gatewayEnvNames(deployment);
+
+    expect(envNames).toContain("ANTHROPIC_API_KEY");
+    expect(envNames).toContain("OPENAI_API_KEY");
+  });
+
+  it("excludes GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION when proxy is active", () => {
+    const proxyConfig = makeConfig({
+      inferenceProvider: "vertex-anthropic",
+      litellmProxy: true,
+      gcpServiceAccountJson: '{"project_id":"test"}',
+    });
+
+    const deployment = deploymentManifest("ns", proxyConfig);
+    const envNames = gatewayEnvNames(deployment);
+
+    expect(envNames).not.toContain("GOOGLE_CLOUD_PROJECT");
+    expect(envNames).not.toContain("GOOGLE_CLOUD_LOCATION");
   });
 });

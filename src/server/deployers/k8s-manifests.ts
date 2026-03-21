@@ -207,8 +207,9 @@ export function deploymentManifest(
   const useOtelDirect = useOtel && !otelViaOperator;
 
   const optionalKeys = [
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
+    // Fix for #6: in proxy mode the gateway talks to LiteLLM, not directly
+    // to Anthropic/OpenAI, so don't leak API keys into the gateway env.
+    ...(!useProxy ? ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"] : []),
     "MODEL_ENDPOINT",
     "TELEGRAM_BOT_TOKEN",
     // In proxy mode LiteLLM gets project/location from its config.yaml;

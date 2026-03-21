@@ -44,10 +44,13 @@ export function normalizeModelRef(config, modelRef) {
     if (config.inferenceProvider === "openai" || config.inferenceProvider === "custom-endpoint") {
         return `openai/${trimmed}`;
     }
-    if (config.inferenceProvider === "vertex-anthropic")
-        return `anthropic-vertex/${trimmed}`;
-    if (config.inferenceProvider === "vertex-google")
-        return `google-vertex/${trimmed}`;
+    // Fix for #1: check litellm proxy before falling back to direct vertex providers
+    if (config.inferenceProvider === "vertex-anthropic") {
+        return shouldUseLitellmProxy(config) ? `litellm/${trimmed}` : `anthropic-vertex/${trimmed}`;
+    }
+    if (config.inferenceProvider === "vertex-google") {
+        return shouldUseLitellmProxy(config) ? `litellm/${trimmed}` : `google-vertex/${trimmed}`;
+    }
     if (config.vertexEnabled && shouldUseLitellmProxy(config))
         return `litellm/${trimmed}`;
     if (config.vertexEnabled) {
