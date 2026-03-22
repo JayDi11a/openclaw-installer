@@ -46,22 +46,39 @@ export async function getDisabledModes(): Promise<string[]> {
   return [];
 }
 
-export async function setModeDisabled(mode: string, disabled: boolean): Promise<void> {
-  const config = await readPluginConfig();
-  const current = new Set(
-    Array.isArray(config.disabled)
-      ? config.disabled.filter((m): m is string => typeof m === "string")
-      : [],
-  );
+let configLock: Promise<void> = Promise.resolve();
 
-  if (disabled) {
-    current.add(mode);
-  } else {
-    current.delete(mode);
+export async function setModeDisabled(mode: string, disabled: boolean): Promise<void> {
+  // Validate mode string to prevent arbitrary values from reaching the config file
+  if (!/^[a-z][a-z0-9-]*$/.test(mode)) {
+    throw new Error(`Invalid mode identifier: ${mode}`);
   }
 
-  config.disabled = [...current];
-  await writePluginConfig(config);
+  // Serialize concurrent read-modify-write cycles to avoid data loss
+  const prevLock = configLock;
+  let release!: () => void;
+  configLock = new Promise<void>((resolve) => { release = resolve; });
+
+  await prevLock;
+  try {
+    const config = await readPluginConfig();
+    const current = new Set(
+      Array.isArray(config.disabled)
+        ? config.disabled.filter((m): m is string => typeof m === "string")
+        : [],
+    );
+
+    if (disabled) {
+      current.add(mode);
+    } else {
+      current.delete(mode);
+    }
+
+    config.disabled = [...current];
+    await writePluginConfig(config);
+  } finally {
+    release();
+  }
 }
 
 async function discoverProviderPlugins(registry: DeployerRegistry): Promise<void> {
