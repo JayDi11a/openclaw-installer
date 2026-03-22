@@ -15,7 +15,7 @@ import type {
 } from "./types.js";
 import { namespaceName, agentId, generateToken } from "./k8s-helpers.js";
 import { loadWorkspaceFiles } from "./k8s-agent.js";
-import { loadAgentSourceWorkspaceTree } from "./agent-source.js";
+import { loadAgentSourceCronJobs, loadAgentSourceWorkspaceTree } from "./agent-source.js";
 import {
   namespaceManifest,
   pvcManifest,
@@ -115,7 +115,8 @@ export class KubernetesDeployer implements Deployer {
     const { files: workspaceFiles } = loadWorkspaceFiles(config, log);
     const skillEntries = await loadTextTree(skillsDir()).catch(() => []);
     const agentTreeEntries = await loadAgentSourceWorkspaceTree(config.agentSourceDir).catch(() => []);
-    const cronJobsContent = await readFile(cronJobsFile(), "utf8").catch(() => undefined);
+    const cronJobsContent = loadAgentSourceCronJobs(config.agentSourceDir)
+      ?? await readFile(cronJobsFile(), "utf8").catch(() => undefined);
 
     // 1. Namespace
     await applyNamespace(core, ns, log);
@@ -406,7 +407,8 @@ export class KubernetesDeployer implements Deployer {
     const { files: workspaceFiles, fromHost } = loadWorkspaceFiles(result.config, log);
     const skillEntries = await loadTextTree(skillsDir()).catch(() => []);
     const agentTreeEntries = await loadAgentSourceWorkspaceTree(result.config.agentSourceDir).catch(() => []);
-    const cronJobsContent = await readFile(cronJobsFile(), "utf8").catch(() => undefined);
+    const cronJobsContent = loadAgentSourceCronJobs(result.config.agentSourceDir)
+      ?? await readFile(cronJobsFile(), "utf8").catch(() => undefined);
     if (!fromHost) {
       log("No custom agent files found — using generated defaults");
     }

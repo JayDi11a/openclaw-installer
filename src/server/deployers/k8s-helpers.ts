@@ -168,14 +168,14 @@ function attachSecretHandlingConfig(ocConfig: Record<string, unknown>, config: D
     if (openaiApiKeyRef.source === "env" && openaiApiKeyRef.provider === "default") {
       shouldDefineDefaultEnvProvider = true;
     }
-    const openaiProvider: Record<string, unknown> = {
-      ...((providersMap.openai as Record<string, unknown> | undefined) || {}),
-      apiKey: cloneSecretRef(openaiApiKeyRef),
-    };
     if (config.modelEndpoint?.trim()) {
+      const openaiProvider: Record<string, unknown> = {
+        ...((providersMap.openai as Record<string, unknown> | undefined) || {}),
+        apiKey: cloneSecretRef(openaiApiKeyRef),
+      };
       openaiProvider.baseUrl = config.modelEndpoint.trim();
+      providersMap.openai = openaiProvider;
     }
-    providersMap.openai = openaiProvider;
   }
 
   if (Object.keys(providersMap).length > 0) {

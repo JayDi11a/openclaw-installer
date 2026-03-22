@@ -117,10 +117,9 @@ describe("model config generation", () => {
     expect(normalizeModelRef(config, "anthropic-vertex/my-model")).toBe("anthropic-vertex/my-model");
   });
 
-  it("writes upstream SecretRefs and provider config when agent security mode is enabled", () => {
+  it("writes external secret provider config without emitting an invalid plain OpenAI provider stub", () => {
     const config = makeConfig({
       inferenceProvider: "openai",
-      agentSecurityMode: "secretrefs",
       secretsProvidersJson: JSON.stringify({
         default: { source: "env" },
         vault_openai: {
@@ -155,11 +154,7 @@ describe("model config generation", () => {
         command: "/usr/local/bin/vault",
       },
     });
-    expect(rendered.models?.providers?.openai?.apiKey).toEqual({
-      source: "exec",
-      provider: "vault_openai",
-      id: "value",
-    });
+    expect(rendered.models?.providers?.openai).toBeUndefined();
     expect(rendered.channels?.telegram?.botToken).toEqual({
       source: "env",
       provider: "default",
@@ -168,11 +163,10 @@ describe("model config generation", () => {
     expect(rendered.channels?.telegram?.allowFrom).toEqual([12345]);
   });
 
-  it("auto-generates env SecretRefs for supported cluster secrets stored in Kubernetes Secrets", () => {
+  it("auto-generates env SecretRefs for supported cluster secrets without an invalid plain OpenAI provider stub", () => {
     const config = makeConfig({
       mode: "kubernetes",
       inferenceProvider: "openai",
-      agentSecurityMode: "secretrefs",
       openaiApiKey: "sk-openai-test",
       telegramEnabled: true,
       telegramBotToken: "123:abc",
@@ -188,11 +182,7 @@ describe("model config generation", () => {
     expect(rendered.secrets?.providers).toMatchObject({
       default: { source: "env" },
     });
-    expect(rendered.models?.providers?.openai?.apiKey).toEqual({
-      source: "env",
-      provider: "default",
-      id: "OPENAI_API_KEY",
-    });
+    expect(rendered.models?.providers?.openai).toBeUndefined();
     expect(rendered.channels?.telegram?.botToken).toEqual({
       source: "env",
       provider: "default",

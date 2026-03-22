@@ -1018,22 +1018,6 @@ export default function DeployForm({ onDeployStarted }: Props) {
           />
         </div>
 
-        {mode === "local" && (
-          <div className="form-group">
-            <label>Agent Source Directory</label>
-            <input
-              type="text"
-              placeholder="/path/to/agents-dir (optional)"
-              value={config.agentSourceDir}
-              onChange={(e) => update("agentSourceDir", e.target.value)}
-            />
-            <div className="hint">
-              Host directory with <code>workspace-*</code>, <code>skills/</code>, and <code>cron/jobs.json</code> to provision into the instance.
-              Defaults to <code>~/.openclaw/</code> if it exists.
-            </div>
-          </div>
-        )}
-
         <div className="form-group">
           <label>Container Image</label>
           <input
@@ -1089,6 +1073,68 @@ export default function DeployForm({ onDeployStarted }: Props) {
             ) : null}
           </div>
         )}
+
+        <details style={{ marginTop: "1.5rem" }}>
+          <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+            Agent Options
+            <span style={{ color: "var(--text-secondary)", fontWeight: "normal" }}>
+              {" "}Optional: source directory, cron jobs, subagent spawning
+            </span>
+          </summary>
+
+          <div className="card" style={{ marginTop: "0.75rem" }}>
+            <div className="form-group">
+              <label>Agent Source Directory</label>
+              <input
+                type="text"
+                placeholder="/path/to/agents-dir (optional)"
+                value={config.agentSourceDir}
+                onChange={(e) => update("agentSourceDir", e.target.value)}
+              />
+              <div className="hint">
+                Installer host directory with <code>workspace-*</code>, <code>skills/</code>, and optional <code>cron/jobs.json</code> to provision into the instance.
+                Defaults to <code>~/.openclaw/</code> if it exists.
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <input
+                  type="checkbox"
+                  checked={config.cronEnabled}
+                  onChange={(e) =>
+                    setConfig((prev) => ({ ...prev, cronEnabled: e.target.checked }))
+                  }
+                  style={{ width: "auto" }}
+                />
+                Enable Cron Jobs
+              </label>
+              <div className="hint">
+                Scheduled jobs are loaded from <code>cron/jobs.json</code> in the Agent Source Directory when present.
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Subagent Spawning</label>
+              <select
+                value={config.subagentPolicy}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    subagentPolicy: e.target.value as "none" | "self" | "unrestricted",
+                  }))
+                }
+              >
+                <option value="none">Disabled</option>
+                <option value="self">Same agent only (self-delegation)</option>
+                <option value="unrestricted">Unrestricted (any agent)</option>
+              </select>
+              <div className="hint">
+                Controls whether the agent can spawn subagents.
+              </div>
+            </div>
+          </div>
+        </details>
 
         {mode === "local" && (
           <div className="form-group">
@@ -1838,166 +1884,118 @@ export default function DeployForm({ onDeployStarted }: Props) {
               </div>
             </div>
 
-            {inferenceProvider === "anthropic" && (
-              <div className="card" style={{ marginBottom: "1rem" }}>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Anthropic SecretRef Source</label>
-                    <select
-                      value={config.anthropicApiKeyRefSource}
-                      onChange={(e) => update("anthropicApiKeyRefSource", e.target.value)}
-                    >
-                      <option value="env">env</option>
-                      <option value="file">file</option>
-                      <option value="exec">exec</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Anthropic SecretRef Provider</label>
-                    <input
-                      type="text"
-                      placeholder="default"
-                      value={config.anthropicApiKeyRefProvider}
-                      onChange={(e) => update("anthropicApiKeyRefProvider", e.target.value)}
-                    />
-                  </div>
+            <div className="card" style={{ marginBottom: "1rem" }}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Anthropic SecretRef Source</label>
+                  <select
+                    value={config.anthropicApiKeyRefSource}
+                    onChange={(e) => update("anthropicApiKeyRefSource", e.target.value)}
+                  >
+                    <option value="env">env</option>
+                    <option value="file">file</option>
+                    <option value="exec">exec</option>
+                  </select>
                 </div>
                 <div className="form-group">
-                  <label>Anthropic SecretRef ID</label>
+                  <label>Anthropic SecretRef Provider</label>
                   <input
                     type="text"
-                    placeholder="ANTHROPIC_API_KEY or /providers/anthropic/apiKey or providers/anthropic/apiKey"
-                    value={config.anthropicApiKeyRefId}
-                    onChange={(e) => update("anthropicApiKeyRefId", e.target.value)}
+                    placeholder="default"
+                    value={config.anthropicApiKeyRefProvider}
+                    onChange={(e) => update("anthropicApiKeyRefProvider", e.target.value)}
                   />
-                  <div className="hint">
-                    Optional override. Leave blank to use the installer-managed env-backed SecretRef automatically.
-                  </div>
                 </div>
               </div>
-            )}
+              <div className="form-group">
+                <label>Anthropic SecretRef ID</label>
+                <input
+                  type="text"
+                  placeholder="ANTHROPIC_API_KEY or /providers/anthropic/apiKey or providers/anthropic/apiKey"
+                  value={config.anthropicApiKeyRefId}
+                  onChange={(e) => update("anthropicApiKeyRefId", e.target.value)}
+                />
+                <div className="hint">
+                  Optional override. Leave blank to use the installer-managed env-backed SecretRef automatically.
+                </div>
+              </div>
+            </div>
 
-            {(inferenceProvider === "openai" || inferenceProvider === "custom-endpoint") && (
-              <div className="card" style={{ marginBottom: "1rem" }}>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>OpenAI SecretRef Source</label>
-                    <select
-                      value={config.openaiApiKeyRefSource}
-                      onChange={(e) => update("openaiApiKeyRefSource", e.target.value)}
-                    >
-                      <option value="env">env</option>
-                      <option value="file">file</option>
-                      <option value="exec">exec</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>OpenAI SecretRef Provider</label>
-                    <input
-                      type="text"
-                      placeholder="default"
-                      value={config.openaiApiKeyRefProvider}
-                      onChange={(e) => update("openaiApiKeyRefProvider", e.target.value)}
-                    />
-                  </div>
+            <div className="card" style={{ marginBottom: "1rem" }}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>OpenAI SecretRef Source</label>
+                  <select
+                    value={config.openaiApiKeyRefSource}
+                    onChange={(e) => update("openaiApiKeyRefSource", e.target.value)}
+                  >
+                    <option value="env">env</option>
+                    <option value="file">file</option>
+                    <option value="exec">exec</option>
+                  </select>
                 </div>
                 <div className="form-group">
-                  <label>OpenAI SecretRef ID</label>
+                  <label>OpenAI SecretRef Provider</label>
                   <input
                     type="text"
-                    placeholder="OPENAI_API_KEY or /providers/openai/apiKey or providers/openai/apiKey"
-                    value={config.openaiApiKeyRefId}
-                    onChange={(e) => update("openaiApiKeyRefId", e.target.value)}
+                    placeholder="default"
+                    value={config.openaiApiKeyRefProvider}
+                    onChange={(e) => update("openaiApiKeyRefProvider", e.target.value)}
                   />
-                  <div className="hint">
-                    Optional override. Leave blank to use the installer-managed env-backed SecretRef automatically.
-                  </div>
                 </div>
               </div>
-            )}
+              <div className="form-group">
+                <label>OpenAI SecretRef ID</label>
+                <input
+                  type="text"
+                  placeholder="OPENAI_API_KEY or /providers/openai/apiKey or providers/openai/apiKey"
+                  value={config.openaiApiKeyRefId}
+                  onChange={(e) => update("openaiApiKeyRefId", e.target.value)}
+                />
+                <div className="hint">
+                  Optional override. Leave blank to use the installer-managed env-backed SecretRef automatically.
+                </div>
+              </div>
+            </div>
 
-            {config.telegramEnabled && (
-              <div className="card" style={{ marginBottom: "1rem" }}>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Telegram SecretRef Source</label>
-                    <select
-                      value={config.telegramBotTokenRefSource}
-                      onChange={(e) => update("telegramBotTokenRefSource", e.target.value)}
-                    >
-                      <option value="env">env</option>
-                      <option value="file">file</option>
-                      <option value="exec">exec</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Telegram SecretRef Provider</label>
-                    <input
-                      type="text"
-                      placeholder="default"
-                      value={config.telegramBotTokenRefProvider}
-                      onChange={(e) => update("telegramBotTokenRefProvider", e.target.value)}
-                    />
-                  </div>
+            <div className="card" style={{ marginBottom: "1rem" }}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Telegram SecretRef Source</label>
+                  <select
+                    value={config.telegramBotTokenRefSource}
+                    onChange={(e) => update("telegramBotTokenRefSource", e.target.value)}
+                  >
+                    <option value="env">env</option>
+                    <option value="file">file</option>
+                    <option value="exec">exec</option>
+                  </select>
                 </div>
                 <div className="form-group">
-                  <label>Telegram SecretRef ID</label>
+                  <label>Telegram SecretRef Provider</label>
                   <input
                     type="text"
-                    placeholder="TELEGRAM_BOT_TOKEN or /channels/telegram/botToken or channels/telegram/botToken"
-                    value={config.telegramBotTokenRefId}
-                    onChange={(e) => update("telegramBotTokenRefId", e.target.value)}
+                    placeholder="default"
+                    value={config.telegramBotTokenRefProvider}
+                    onChange={(e) => update("telegramBotTokenRefProvider", e.target.value)}
                   />
-                  <div className="hint">
-                    Optional override. Leave blank to use the installer-managed env-backed SecretRef automatically.
-                  </div>
                 </div>
               </div>
-            )}
+              <div className="form-group">
+                <label>Telegram SecretRef ID</label>
+                <input
+                  type="text"
+                  placeholder="TELEGRAM_BOT_TOKEN or /channels/telegram/botToken or channels/telegram/botToken"
+                  value={config.telegramBotTokenRefId}
+                  onChange={(e) => update("telegramBotTokenRefId", e.target.value)}
+                />
+                <div className="hint">
+                  Optional override. Leave blank to use the installer-managed env-backed SecretRef automatically.
+                </div>
+              </div>
+            </div>
           </div>
         </details>
-
-        <h3 style={{ marginTop: "1.5rem" }}>Agent Security</h3>
-
-        <div className="form-group">
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <input
-              type="checkbox"
-              checked={config.cronEnabled}
-              onChange={(e) =>
-                setConfig((prev) => ({ ...prev, cronEnabled: e.target.checked }))
-              }
-              style={{ width: "auto" }}
-            />
-            Enable cron jobs
-          </label>
-          <div className="hint">
-            Allow the agent to create and run scheduled tasks.
-            Most use cases don&apos;t require this, and it is a known risk vector
-            (agents can modify their own schedules).
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label>Subagent spawning</label>
-          <select
-            value={config.subagentPolicy}
-            onChange={(e) =>
-              setConfig((prev) => ({
-                ...prev,
-                subagentPolicy: e.target.value as "none" | "self" | "unrestricted",
-              }))
-            }
-          >
-            <option value="none">Disabled</option>
-            <option value="self">Same agent only (self-delegation)</option>
-            <option value="unrestricted">Unrestricted (any agent)</option>
-          </select>
-          <div className="hint">
-            Controls whether the agent can spawn subagents.
-            `Unrestricted` allows spawning any agent, which increases attack surface.
-          </div>
-        </div>
 
         <div style={{ marginTop: "1.5rem" }}>
           {!isValid && (
