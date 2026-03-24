@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { installerLocalInstanceDir } from "../paths.js";
 import { installerDataDir } from "../paths.js";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import {
   discoverContainers,
   discoverVolumes,
@@ -361,6 +363,12 @@ router.get("/:id/token", async (req, res) => {
     return;
   }
 
+  const savedToken = await readSavedGatewayToken(req.params.id);
+  if (savedToken) {
+    res.json({ token: savedToken });
+    return;
+  }
+
   const runtime = await detectRuntime();
   if (!runtime) {
     res.status(500).json({ error: "No container runtime" });
@@ -533,10 +541,18 @@ router.get("/:id/command", async (req, res) => {
     }
 
     const envList: string[] = config.Env || [];
+    const redactedEnvKeys = new Set([
+      "ANTHROPIC_API_KEY",
+      "OPENAI_API_KEY",
+      "TELEGRAM_BOT_TOKEN",
+      "SSH_IDENTITY",
+      "SSH_CERTIFICATE",
+      "SSH_KNOWN_HOSTS",
+    ]);
     for (const e of envList) {
       if (e.startsWith("PATH=") || e.startsWith("HOSTNAME=") || e.startsWith("container=")) continue;
-      if (e.includes("API_KEY=") || e.includes("TOKEN=")) {
-        const [key] = e.split("=");
+      const [key] = e.split("=", 1);
+      if (redactedEnvKeys.has(key) || key.endsWith("_TOKEN") || key.endsWith("_API_KEY")) {
         parts.push("-e", `${key}=***`);
       } else {
         parts.push("-e", `"${e}"`);
@@ -670,6 +686,16 @@ async function readSavedConfig(containerName: string): Promise<Record<string, st
     // no saved config
   }
   return vars;
+}
+
+async function readSavedGatewayToken(containerName: string): Promise<string | undefined> {
+  try {
+    const tokenPath = join(installerLocalInstanceDir(containerName), "gateway-token");
+    const token = (await readFile(tokenPath, "utf8")).trim();
+    return token || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 

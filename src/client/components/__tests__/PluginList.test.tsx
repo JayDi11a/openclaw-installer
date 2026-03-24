@@ -17,7 +17,6 @@ function mockFetch(response = pluginsResponse) {
     if (url === "/api/plugins" && !opts?.method) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(response) });
     }
-    // enable/disable POST
     if (url.startsWith("/api/plugins/") && opts?.method === "POST") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
     }
@@ -41,8 +40,6 @@ describe("PluginList", () => {
     await screen.findByText("This Machine");
     expect(screen.getByText("Kubernetes")).toBeTruthy();
     expect(screen.getByText("OpenShift")).toBeTruthy();
-
-    // Section headers and source badges
     expect(screen.getAllByText("Built-in").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Plugins")).toBeTruthy();
   });
@@ -83,7 +80,6 @@ describe("PluginList", () => {
     render(<PluginList />);
 
     await screen.findByText("This Machine");
-    // Built-in plugins should not have Enable/Disable buttons
     expect(screen.queryByRole("button", { name: /disable this machine/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /enable this machine/i })).toBeNull();
   });
@@ -157,11 +153,8 @@ describe("PluginList", () => {
     render(<PluginList />);
 
     const toggle = await screen.findByText(/1 plugin failed to load/);
-
-    // Error details hidden by default
     expect(screen.queryByText("openclaw-installer-broken")).toBeNull();
 
-    // Click to expand
     const user = userEvent.setup();
     await user.click(toggle);
     expect(screen.getByText("openclaw-installer-broken")).toBeTruthy();
@@ -184,7 +177,6 @@ describe("PluginList", () => {
     expect(screen.getByText("Provider Plugin")).toBeTruthy();
   });
 
-  // Regression tests for issue #46: Kubernetes superseded by OpenShift
   it("shows Superseded badge when plugin has supersededBy field", async () => {
     const response = {
       plugins: [

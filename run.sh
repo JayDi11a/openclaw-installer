@@ -245,8 +245,9 @@ if [ "$RUNTIME" = "docker" ]; then
     --name "$CONTAINER_NAME" \
     -p "${PORT}:3000" \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -v "$HOME/.openclaw:/home/node/.openclaw:ro" \
+    -v "$HOME/.openclaw:/host-openclaw:ro" \
     -v "$HOME/.openclaw/installer:/home/node/.openclaw/installer" \
+    -e AGENT_SOURCE_DIR=/host-openclaw \
     "${ENV_FLAGS[@]}" \
     "${GCP_MOUNT_FLAGS[@]}" \
     "$IMAGE_NAME"
@@ -284,8 +285,9 @@ case "$OS" in
       --security-opt label=disable \
       -p "${PORT}:3000" \
       -v "$PODMAN_SOCK:/run/podman/podman.sock" \
-      -v "$HOME/.openclaw:/home/node/.openclaw:ro,Z" \
+      -v "$HOME/.openclaw:/host-openclaw:ro,Z" \
       -v "$HOME/.openclaw/installer:/home/node/.openclaw/installer:Z" \
+      -e AGENT_SOURCE_DIR=/host-openclaw \
       "${ENV_FLAGS[@]}" \
       "${GCP_MOUNT_FLAGS[@]}" \
       "$IMAGE_NAME"

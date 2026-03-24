@@ -63,6 +63,27 @@ describe("model config generation", () => {
     });
   });
 
+  it("writes the display name into the default agent identity", () => {
+    const config = makeConfig({
+      agentName: "joe",
+      agentDisplayName: "Joe",
+    });
+
+    const rendered = buildOpenClawConfig(config, "gateway-token") as {
+      agents?: {
+        list?: Array<{
+          id?: string;
+          identity?: { name?: string };
+        }>;
+      };
+    };
+
+    expect(rendered.agents?.list?.[0]).toMatchObject({
+      id: "openclaw_joe",
+      identity: { name: "Joe" },
+    });
+  });
+
   it("prefers the selected Anthropic provider even when an OpenAI key is also present", () => {
     const config = makeConfig({
       inferenceProvider: "anthropic",

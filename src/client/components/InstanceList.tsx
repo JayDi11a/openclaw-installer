@@ -32,6 +32,15 @@ interface Instance {
 
 type ExpandedPanel = "connection" | "command" | "logs" | null;
 
+function defaultSessionKey(inst: Instance): string {
+  const prefix = inst.config.prefix?.trim() || "openclaw";
+  const agentName = inst.config.agentName?.trim();
+  if (!agentName) {
+    return "main";
+  }
+  return `agent:${prefix}_${agentName}:main`;
+}
+
 function StatusBadge({ inst, isActing }: { inst: Instance; isActing: boolean }) {
   const badgeColor: Record<string, string> = {
     running: "",
@@ -223,7 +232,7 @@ export default function InstanceList() {
   };
 
   const handleOpenWithToken = async (inst: Instance) => {
-    const targetUrl = inst.url ? `${inst.url}?session=main` : inst.url;
+    const targetUrl = inst.url ? `${inst.url}?session=${encodeURIComponent(defaultSessionKey(inst))}` : inst.url;
     try {
       const res = await fetch(`/api/instances/${inst.id}/token`);
       const data = await res.json();
@@ -421,7 +430,10 @@ export default function InstanceList() {
                 }}
               >
                 {[
-                  { label: "URL", value: `${inst.url}?session=main#token=${encodeURIComponent(panelContent)}` },
+                  {
+                    label: "URL",
+                    value: `${inst.url}?session=${encodeURIComponent(defaultSessionKey(inst))}#token=${encodeURIComponent(panelContent)}`,
+                  },
                   { label: "Token", value: panelContent },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>

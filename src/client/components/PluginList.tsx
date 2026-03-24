@@ -255,11 +255,7 @@ function PluginRow({
             onClick={() => onToggle(plugin.mode, plugin.enabled)}
             aria-label={`${plugin.enabled ? "Disable" : "Enable"} ${plugin.title} plugin`}
           >
-            {toggling === plugin.mode
-              ? "..."
-              : plugin.enabled
-                ? "Disable"
-                : "Enable"}
+            {toggling === plugin.mode ? "..." : plugin.enabled ? "Disable" : "Enable"}
           </button>
         )}
       </div>

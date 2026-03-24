@@ -250,6 +250,7 @@ export function buildOpenClawConfig(config: DeployConfig, gatewayToken: string):
         {
           id,
           name: config.agentDisplayName || config.agentName,
+          identity: { name: config.agentDisplayName || config.agentName },
           workspace: `~/.openclaw/workspace-${id}`,
           model: { primary: model },
           subagents: sourceBundle?.mainAgent?.subagents || subagentConfig(config.subagentPolicy),
@@ -258,6 +259,7 @@ export function buildOpenClawConfig(config: DeployConfig, gatewayToken: string):
         ...((sourceBundle?.agents || []).map((entry) => ({
           id: entry.id,
           name: entry.name || entry.id,
+          ...(entry.name ? { identity: { name: entry.name } } : {}),
           workspace: `~/.openclaw/workspace-${entry.id}`,
           model: entry.model || { primary: model },
           ...(entry.subagents ? { subagents: entry.subagents } : {}),

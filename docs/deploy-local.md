@@ -48,6 +48,10 @@ Open `http://localhost:3000`, pick **"This Machine"**, fill in the form, and hit
 
 The installer pulls the image, provisions your agent with a default identity and security guidelines, starts the container, and streams logs in real time. Your OpenClaw instance will be running at `http://localhost:18789`.
 
+## First Browser Connect
+
+For installer-managed local containerized installs, the Control UI opens directly with the saved gateway token.
+
 ## Secret Handling
 
 For local deploys, the installer now follows the upstream OpenClaw secret model by default:
@@ -57,6 +61,12 @@ For local deploys, the installer now follows the upstream OpenClaw secret model 
 - you can optionally provide `secrets.providers` JSON and explicit SecretRef overrides for `env`, `file`, or `exec` providers
 
 This means the container still receives the credentials it needs, but `openclaw.json` does not embed the plaintext API keys or Telegram bot token.
+
+## Using The OpenClaw CLI
+
+Installer-managed local instances save `OPENCLAW_CONTAINER` in their instance `.env`, so the upstream OpenClaw CLI can target the running local container directly.
+
+See [openclaw-cli-local.md](openclaw-cli-local.md) for the exact workflow.
 
 ## SSH Sandbox
 
@@ -75,7 +85,8 @@ The installer runs a podman (or docker) container with:
 - `-p <port>:18789` — port mapping (works on macOS and Linux)
 - `--bind lan` — gateway listens on `0.0.0.0` (required for port mapping)
 - Labels: `openclaw.managed=true`, `openclaw.prefix=<prefix>`, `openclaw.agent=<name>`
-- Volume: `openclaw-<prefix>-data` at `/home/node/.openclaw`
+- Installer-managed local state volume `openclaw-<prefix>-data` at `/home/node/.openclaw`
+- Optional read-only agent source mount at `/tmp/agent-source` when `AGENT_SOURCE_DIR` or the form field is set
 
 ### Init script
 
@@ -167,7 +178,7 @@ After the initial deploy, your agent files live in `~/.openclaw/workspace-<prefi
 
 1. Edit the files locally (e.g., change `AGENTS.md` to update instructions, `SOUL.md` to change personality)
 2. Go to the **Instances** tab and **Stop** the container
-3. **Start** it again — the installer copies your updated files into the data volume before starting the container
+3. **Start** it again — the installer copies your updated files into the local runtime store before starting the container
 
 Every Start syncs agent files from the host, so Stop/Start is all you need. No separate re-deploy step is required for local instances.
 

@@ -298,8 +298,9 @@ function buildOpenClawConfig(config: DeployConfig, gatewayToken: string): string
           `http://localhost:${port}`,
           `http://127.0.0.1:${port}`,
         ],
-        // Required for non-loopback bind; safe because the container is only
-        // exposed on localhost via port mapping.
+        // The installer exposes the gateway only on localhost via port mapping.
+        // With a proper auth proxy in front, this bypass is not meaningfully
+        // dangerous in practice; here it avoids first-connect browser pairing.
         dangerouslyDisableDeviceAuth: true,
       },
     },
@@ -314,6 +315,7 @@ function buildOpenClawConfig(config: DeployConfig, gatewayToken: string): string
         {
           id: agentId,
           name: config.agentDisplayName || config.agentName,
+          identity: { name: config.agentDisplayName || config.agentName },
           workspace: `~/.openclaw/workspace-${agentId}`,
           model: { primary: model },
           subagents: sourceBundle?.mainAgent?.subagents || subagentConfig(config.subagentPolicy),
@@ -322,6 +324,7 @@ function buildOpenClawConfig(config: DeployConfig, gatewayToken: string): string
         ...((sourceBundle?.agents || []).map((entry) => ({
           id: entry.id,
           name: entry.name || entry.id,
+          ...(entry.name ? { identity: { name: entry.name } } : {}),
           workspace: `~/.openclaw/workspace-${entry.id}`,
           model: entry.model || { primary: model },
           ...(entry.subagents ? { subagents: entry.subagents } : {}),
@@ -484,13 +487,12 @@ function runCommand(
   log: LogCallback,
 ): Promise<{ code: number }> {
   return new Promise((resolve, reject) => {
-    // Redact secrets from logged command
     const redacted = args.map((a, i) =>
       args[i - 1] === "-e" &&
       /^(ANTHROPIC_API_KEY|OPENAI_API_KEY|TELEGRAM_BOT_TOKEN|SSH_IDENTITY|SSH_CERTIFICATE|SSH_KNOWN_HOSTS)=/.test(
         a,
       )
-        ? a.replace(/=.*/, "=***")
+        ? a.replace(/=[\s\S]*/, "=***")
         : a
     );
     log(`$ ${cmd} ${redacted.join(" ")}`);
@@ -518,6 +520,23 @@ function defaultAgentSourceDir(isContainerized: boolean): string | null {
   return existsSync(dir) ? dir : null;
 }
 
+function bindMountSpec(hostPath: string, containerPath: string, options?: string): string {
+  const optionParts = options ? options.split(",").filter(Boolean) : [];
+  if (process.platform === "linux") {
+    optionParts.push("Z");
+  }
+  const suffix = optionParts.length > 0 ? `:${optionParts.join(",")}` : "";
+  return `${hostPath}:${containerPath}${suffix}`;
+}
+
+function localStateMountArgs(config: DeployConfig): string[] {
+  return ["-v", `${volumeName(config)}:/home/node/.openclaw`];
+}
+
+function runtimeOwnershipFixupCommand(): string {
+  return "chown -R node:node /home/node/.openclaw 2>/dev/null || true";
+}
+
 /**
  * Build the podman/docker run args for a given config.
  * Used by both deploy() and start() so the same long-lived run command
@@ -533,6 +552,7 @@ function buildRunArgs(
 ): string[] {
   const { effectiveConfig } = prepareLocalSandboxSshConfig(config);
   const image = resolveImage(effectiveConfig);
+  const isContainerized = existsSync("/.dockerenv") || existsSync("/run/.containerenv");
   const useProxy = shouldUseLitellmProxy(effectiveConfig) && !!litellmMasterKey;
   const useOtelSidecar = shouldUseOtel(effectiveConfig) && !!otelEnvVars;
   const hasSidecars = useProxy || useOtelSidecar;
@@ -627,7 +647,7 @@ function buildRunArgs(
     runArgs.push("-e", `${key}=${val}`);
   }
 
-  runArgs.push("-v", `${volumeName(effectiveConfig)}:/home/node/.openclaw`);
+  runArgs.push(...localStateMountArgs(effectiveConfig));
   runArgs.push(image);
 
   // Bind to lan (0.0.0.0) so port mapping works from host into pod/container
@@ -653,6 +673,7 @@ export class LocalDeployer implements Deployer {
     // Remove existing container with same name (in case --rm didn't fire)
     await removeContainer(runtime, name);
 
+    const isContainerized = existsSync("/.dockerenv") || existsSync("/run/.containerenv");
     const image = resolveImage(config);
 
     // Pull the image if it doesn't exist locally.
@@ -673,9 +694,9 @@ export class LocalDeployer implements Deployer {
       }
     }
 
-    // Ensure volume has openclaw.json + default agent workspace
+    // Ensure local state store has openclaw.json + default agent workspace
     const vol = volumeName(config);
-    log("Initializing config volume...");
+    log("Initializing local state...");
 
     const agentId = `${config.prefix || "openclaw"}_${config.agentName}`;
     const workspaceDir = `/home/node/.openclaw/workspace-${agentId}`;
@@ -804,21 +825,21 @@ something that requires the user's attention.`;
       `for d in /tmp/agent-source/workspace-*; do if [ -d "$d" ]; then base="$(basename "$d")"; if [ "$base" = "workspace-main" ]; then dest='${workspaceDir}'; else dest="/home/node/.openclaw/$base"; fi; mkdir -p "$dest"; cp -r "$d"/* "$dest"/ 2>/dev/null || true; fi; done`,
       `if [ -d /tmp/agent-source/skills ]; then cp -r /tmp/agent-source/skills/* /home/node/.openclaw/skills/ 2>/dev/null || true; fi`,
       `if [ -f /tmp/agent-source/cron/jobs.json ]; then mkdir -p /home/node/.openclaw/cron && cp /tmp/agent-source/cron/jobs.json /home/node/.openclaw/cron/jobs.json 2>/dev/null || true; fi`,
+      runtimeOwnershipFixupCommand(),
     ].join("\n");
 
     const initArgs = [
       "run", "--rm",
-      "-v", `${vol}:/home/node/.openclaw`,
+      ...localStateMountArgs(config),
     ];
 
     // Mount agent source directory if explicitly provided, or auto-detect on host.
     // Auto-detect only works when running directly (not containerized), because
     // the path must be valid on the container host, not inside the installer container.
-    const isContainerized = existsSync("/.dockerenv") || existsSync("/run/.containerenv");
     const agentSourceDir = normalizeHostPath(config.agentSourceDir) || defaultAgentSourceDir(isContainerized);
 
     if (agentSourceDir) {
-      initArgs.push("-v", `${agentSourceDir}:/tmp/agent-source:ro`);
+      initArgs.push("-v", bindMountSpec(agentSourceDir, "/tmp/agent-source", "ro"));
       log(`Mounting agent source: ${agentSourceDir}`);
     }
 
@@ -833,10 +854,10 @@ something that requires the user's attention.`;
     // Write GCP SA JSON into volume as a separate step (avoids heredoc/shell escaping issues)
     if (config.gcpServiceAccountJson) {
       const b64 = Buffer.from(config.gcpServiceAccountJson).toString("base64");
-      const saScript = `mkdir -p /home/node/.openclaw/gcp && echo '${b64}' | base64 -d > ${GCP_SA_CONTAINER_PATH} && chmod 600 ${GCP_SA_CONTAINER_PATH}`;
+      const saScript = `mkdir -p /home/node/.openclaw/gcp && echo '${b64}' | base64 -d > ${GCP_SA_CONTAINER_PATH} && chmod 600 ${GCP_SA_CONTAINER_PATH} && ${runtimeOwnershipFixupCommand()}`;
       const saResult = await runCommand(runtime, [
         "run", "--rm",
-        "-v", `${vol}:/home/node/.openclaw`,
+        ...localStateMountArgs(config),
         image, "sh", "-c", saScript,
       ], log);
       if (saResult.code !== 0) {
@@ -863,11 +884,12 @@ something that requires the user's attention.`;
         `echo '${litellmB64}' | base64 -d > ${LITELLM_CONFIG_PATH}`,
         `echo '${keyB64}' | base64 -d > ${LITELLM_KEY_PATH}`,
         `chmod 600 ${LITELLM_KEY_PATH}`,
+        runtimeOwnershipFixupCommand(),
       ].join(" && ");
 
       const litellmInitResult = await runCommand(runtime, [
         "run", "--rm",
-        "-v", `${vol}:/home/node/.openclaw`,
+        ...localStateMountArgs(config),
         image, "sh", "-c", litellmScript,
       ], log);
       if (litellmInitResult.code !== 0) {
@@ -914,7 +936,7 @@ something that requires the user's attention.`;
           "run", "-d",
           "--name", litellmName,
           "--pod", pod,
-          "-v", `${vol}:/home/node/.openclaw`,
+          ...localStateMountArgs(config),
           "-e", `GOOGLE_APPLICATION_CREDENTIALS=${GCP_SA_CONTAINER_PATH}`,
           litellmImage,
           "--config", LITELLM_CONFIG_PATH, "--port", String(LITELLM_PORT),
@@ -930,7 +952,7 @@ something that requires the user's attention.`;
           "--name", litellmName,
           "-p", `${port}:18789`,
           "-p", `${port + 1}:${LITELLM_PORT}`,
-          "-v", `${vol}:/home/node/.openclaw`,
+          ...localStateMountArgs(config),
           "-e", `GOOGLE_APPLICATION_CREDENTIALS=${GCP_SA_CONTAINER_PATH}`,
           litellmImage,
           "--config", LITELLM_CONFIG_PATH, "--port", String(LITELLM_PORT),
@@ -1063,14 +1085,9 @@ something that requires the user's attention.`;
     // Extract and save gateway token to host filesystem
     await this.saveInstanceInfo(runtime, name, config, log, gatewayToken);
 
-    const token = await this.readSavedToken(name);
     const url = `http://localhost:${port}`;
-    if (token) {
-      // Show URL with token so users can copy-paste directly (fix for #29)
-      log(`OpenClaw running at ${url}#token=${encodeURIComponent(token)}`);
-    } else {
-      log(`OpenClaw running at ${url}`);
-    }
+    log(`OpenClaw running at ${url}`);
+    log("Use the Open action from the Instances page to open with the saved token");
 
     return {
       id,
@@ -1090,13 +1107,50 @@ something that requires the user's attention.`;
     const effectiveConfig = localSandboxPrepared.effectiveConfig;
     const name = result.containerId ?? containerName(effectiveConfig);
     const port = effectiveConfig.port ?? DEFAULT_PORT;
-    const vol = volumeName(effectiveConfig);
     const image = resolveImage(effectiveConfig);
+    const vol = result.volumeName ?? volumeName(effectiveConfig);
 
     // Copy updated agent files from host into volume before starting
     const isContainerized = existsSync("/.dockerenv") || existsSync("/run/.containerenv");
     const agentId = `${effectiveConfig.prefix || "openclaw"}_${effectiveConfig.agentName}`;
     const agentSourceDir = normalizeHostPath(effectiveConfig.agentSourceDir) || defaultAgentSourceDir(isContainerized);
+
+    const bootstrapGatewayToken = await this.readSavedToken(name) || generateToken();
+    const ocConfig = buildOpenClawConfig(effectiveConfig, bootstrapGatewayToken);
+    const ocConfigB64 = Buffer.from(ocConfig).toString("base64");
+    const bootstrapResult = await runCommand(runtime, [
+      "run", "--rm",
+      ...localStateMountArgs(effectiveConfig),
+      image,
+      "sh",
+      "-c",
+      [
+        "mkdir -p /home/node/.openclaw",
+        `test -f /home/node/.openclaw/openclaw.json || echo '${ocConfigB64}' | base64 -d > /home/node/.openclaw/openclaw.json`,
+        `node -e "const fs=require('fs');const p='/home/node/.openclaw/openclaw.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));if(c.gateway&&c.gateway.controlUi){c.gateway.controlUi.allowedOrigins=['http://localhost:${port}','http://127.0.0.1:${port}'];fs.writeFileSync(p,JSON.stringify(c,null,2))}"`,
+        `mkdir -p /home/node/.openclaw/workspace-${agentId}`,
+        "mkdir -p /home/node/.openclaw/skills",
+        runtimeOwnershipFixupCommand(),
+      ].join(" && "),
+    ], log);
+    if (bootstrapResult.code !== 0) {
+      throw new Error("Failed to initialize local runtime state");
+    }
+
+    if (effectiveConfig.gcpServiceAccountJson) {
+      const b64 = Buffer.from(effectiveConfig.gcpServiceAccountJson).toString("base64");
+      const gcpResult = await runCommand(runtime, [
+        "run", "--rm",
+        ...localStateMountArgs(effectiveConfig),
+        image,
+        "sh",
+        "-c",
+        `mkdir -p /home/node/.openclaw/gcp && echo '${b64}' | base64 -d > ${GCP_SA_CONTAINER_PATH} && chmod 600 ${GCP_SA_CONTAINER_PATH} && ${runtimeOwnershipFixupCommand()}`,
+      ], log);
+      if (gcpResult.code !== 0) {
+        log("WARNING: Failed to restore GCP service account key to runtime state");
+      }
+    }
 
     if (
       agentSourceDir && (
@@ -1110,14 +1164,18 @@ something that requires the user's attention.`;
         `cp /tmp/agent-source/workspace-${agentId}/* '${workspaceDir}/' 2>/dev/null || true`,
         `if [ -d /tmp/agent-source/skills ]; then mkdir -p /home/node/.openclaw/skills && cp -r /tmp/agent-source/skills/* /home/node/.openclaw/skills/ 2>/dev/null || true; fi`,
         `if [ -f /tmp/agent-source/cron/jobs.json ]; then mkdir -p /home/node/.openclaw/cron && cp /tmp/agent-source/cron/jobs.json /home/node/.openclaw/cron/jobs.json 2>/dev/null || true; fi`,
+        runtimeOwnershipFixupCommand(),
       ].join("\n");
 
-      await runCommand(runtime, [
+      const copyResult = await runCommand(runtime, [
         "run", "--rm",
-        "-v", `${vol}:/home/node/.openclaw`,
-        "-v", `${agentSourceDir}:/tmp/agent-source:ro`,
+        ...localStateMountArgs(effectiveConfig),
+        "-v", bindMountSpec(agentSourceDir, "/tmp/agent-source", "ro"),
         image, "sh", "-c", copyScript,
       ], log);
+      if (copyResult.code !== 0) {
+        throw new Error("Failed to sync agent source into local runtime state");
+      }
     }
 
     const sshMaterialScript = [
@@ -1140,13 +1198,17 @@ something that requires the user's attention.`;
             `chmod 600 '${SANDBOX_SSH_KNOWN_HOSTS_CONTAINER_PATH}'`,
           ]
         : []),
+      runtimeOwnershipFixupCommand(),
     ].join("\n");
 
-    await runCommand(runtime, [
+    const sshMaterialResult = await runCommand(runtime, [
       "run", "--rm",
-      "-v", `${vol}:/home/node/.openclaw`,
+      ...localStateMountArgs(effectiveConfig),
       image, "sh", "-c", sshMaterialScript,
     ], log);
+    if (sshMaterialResult.code !== 0) {
+      throw new Error("Failed to stage SSH sandbox material into local runtime state");
+    }
 
     // Remove old container if it exists (stop may not have fully cleaned up)
     await removeContainer(runtime, name);
@@ -1159,7 +1221,7 @@ something that requires the user's attention.`;
       try {
         const { stdout } = await execFileAsync(runtime, [
           "run", "--rm",
-          "-v", `${vol}:/home/node/.openclaw`,
+          ...localStateMountArgs(effectiveConfig),
           image, "cat", LITELLM_KEY_PATH,
         ]);
         litellmMasterKey = stdout.trim();
@@ -1170,12 +1232,15 @@ something that requires the user's attention.`;
         const litellmYaml = generateLitellmConfig(effectiveConfig, litellmMasterKey);
         const litellmB64 = Buffer.from(litellmYaml).toString("base64");
         const keyB64 = Buffer.from(litellmMasterKey).toString("base64");
-        await runCommand(runtime, [
+        const litellmRewriteResult = await runCommand(runtime, [
           "run", "--rm",
-          "-v", `${vol}:/home/node/.openclaw`,
+          ...localStateMountArgs(effectiveConfig),
           image, "sh", "-c",
-          `mkdir -p /home/node/.openclaw/litellm && echo '${litellmB64}' | base64 -d > ${LITELLM_CONFIG_PATH} && echo '${keyB64}' | base64 -d > ${LITELLM_KEY_PATH} && chmod 600 ${LITELLM_KEY_PATH}`,
+          `mkdir -p /home/node/.openclaw/litellm && echo '${litellmB64}' | base64 -d > ${LITELLM_CONFIG_PATH} && echo '${keyB64}' | base64 -d > ${LITELLM_KEY_PATH} && chmod 600 ${LITELLM_KEY_PATH} && ${runtimeOwnershipFixupCommand()}`,
         ], log);
+        if (litellmRewriteResult.code !== 0) {
+          throw new Error("Failed to restore LiteLLM runtime state");
+        }
       }
 
       // Start LiteLLM sidecar
@@ -1200,7 +1265,7 @@ something that requires the user's attention.`;
           "run", "-d",
           "--name", litellmName,
           "--pod", pod,
-          "-v", `${vol}:/home/node/.openclaw`,
+          ...localStateMountArgs(effectiveConfig),
           "-e", `GOOGLE_APPLICATION_CREDENTIALS=${GCP_SA_CONTAINER_PATH}`,
           litellmImage,
           "--config", LITELLM_CONFIG_PATH, "--port", String(LITELLM_PORT),
@@ -1212,7 +1277,7 @@ something that requires the user's attention.`;
           "--name", litellmName,
           "-p", `${port}:18789`,
           "-p", `${port + 1}:${LITELLM_PORT}`,
-          "-v", `${vol}:/home/node/.openclaw`,
+          ...localStateMountArgs(effectiveConfig),
           "-e", `GOOGLE_APPLICATION_CREDENTIALS=${GCP_SA_CONTAINER_PATH}`,
           litellmImage,
           "--config", LITELLM_CONFIG_PATH, "--port", String(LITELLM_PORT),
@@ -1274,16 +1339,19 @@ something that requires the user's attention.`;
       throw new Error("Failed to start container");
     }
 
-    await this.saveInstanceInfo(runtime, name, effectiveConfig, log);
-
-    const token = await this.readSavedToken(name);
-    const url = `http://localhost:${port}`;
-    if (token) {
-      // Show URL with token so users can copy-paste directly (fix for #29)
-      log(`OpenClaw running at ${url}#token=${encodeURIComponent(token)}`);
+    const persistedConfig = {
+      ...result.config,
+      containerRuntime: runtime,
+    };
+    if (bootstrapGatewayToken) {
+      await this.saveInstanceInfo(runtime, name, persistedConfig, log, bootstrapGatewayToken);
     } else {
-      log(`OpenClaw running at ${url}`);
+      await this.saveInstanceInfo(runtime, name, persistedConfig, log);
     }
+
+    const url = `http://localhost:${port}`;
+    log(`OpenClaw running at ${url}`);
+    log("Use the Open action from the Instances page to open with the saved token");
 
     return { ...result, status: "running", url };
   }
@@ -1504,8 +1572,6 @@ something that requires the user's attention.`;
     if (!runtime) throw new Error("No container runtime found");
 
     const name = result.containerId ?? containerName(result.config);
-    // Use actual discovered volume name when available (fixes #24)
-    const vol = result.volumeName ?? volumeName(result.config);
     const image = resolveImage(result.config);
     const agentId = `${result.config.prefix || "openclaw"}_${result.config.agentName}`;
     const workspaceDir = `/home/node/.openclaw/workspace-${agentId}`;
@@ -1538,12 +1604,13 @@ something that requires the user's attention.`;
       `  mkdir -p /home/node/.openclaw/cron`,
       `  cp -v /tmp/agent-source/cron/jobs.json /home/node/.openclaw/cron/jobs.json 2>/dev/null || true`,
       `fi`,
+      runtimeOwnershipFixupCommand(),
     ].join("\n");
 
     const copyResult = await runCommand(runtime, [
       "run", "--rm",
-      "-v", `${vol}:/home/node/.openclaw`,
-      "-v", `${agentSourceDir}:/tmp/agent-source:ro`,
+      ...localStateMountArgs(result.config),
+      "-v", bindMountSpec(agentSourceDir, "/tmp/agent-source", "ro"),
       image, "sh", "-c", copyScript,
     ], log);
 
@@ -1566,7 +1633,7 @@ something that requires the user's attention.`;
       try {
         const { stdout } = await execFileAsync(runtime, [
           "run", "--rm",
-          "-v", `${vol}:/home/node/.openclaw`,
+          ...localStateMountArgs(result.config),
           image, "cat", LITELLM_KEY_PATH,
         ]);
         litellmMasterKey = stdout.trim();

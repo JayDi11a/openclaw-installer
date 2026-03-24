@@ -169,7 +169,9 @@ describe("InstanceList", () => {
     await waitFor(() => {
       // Connection info shows both URL with token and raw token
       expect(screen.getByText("secret-token-123")).toBeInTheDocument();
-      expect(screen.getByText(/http:\/\/localhost:18789\?session=main#token=secret-token-123/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/http:\/\/localhost:18789\?session=agent%3Auser_lynx%3Amain#token=secret-token-123/),
+      ).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /^hide$/i })).toBeInTheDocument();
   });
@@ -243,7 +245,47 @@ describe("InstanceList", () => {
     await user.click(screen.getByText("http://localhost:18789"));
     await waitFor(() => {
       expect(openSpy).toHaveBeenCalledWith(
-        "http://localhost:18789?session=main#token=my-token",
+        "http://localhost:18789?session=agent%3Auser_lynx%3Amain#token=my-token",
+        "_blank",
+        "noopener",
+      );
+    });
+  });
+
+  it("opens cluster URLs with the saved gateway token", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const openSpy = vi.fn();
+    vi.stubGlobal("open", openSpy);
+
+    const runningK8s = {
+      ...runningInstance,
+      id: "k8s-1",
+      mode: "openshift",
+      url: "https://sam-openclaw.apps.example.com",
+    };
+
+    globalThis.fetch = vi.fn((url: string) => {
+      if (url === "/api/health") {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ k8sAvailable: true }) });
+      }
+      if (url === "/api/instances" || url === "/api/instances?includeK8s=1") {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([runningK8s]) });
+      }
+      if (url === "/api/instances/k8s-1/token") {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ token: "cluster-token" }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+    }) as unknown as typeof globalThis.fetch;
+
+    render(<InstanceList />);
+    await waitFor(() => {
+      expect(screen.getByText("https://sam-openclaw.apps.example.com")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("https://sam-openclaw.apps.example.com"));
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://sam-openclaw.apps.example.com?session=agent%3Auser_lynx%3Amain#token=cluster-token",
         "_blank",
         "noopener",
       );

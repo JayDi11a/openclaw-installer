@@ -171,8 +171,16 @@ export class OpenShiftDeployer implements Deployer {
           // Set allowedOrigins to include the Route URL
           if (parsed.gateway?.controlUi) {
             parsed.gateway.controlUi.allowedOrigins = [routeUrl];
-            // Disable device auth — OAuth proxy already authenticates users
+            // OAuth proxy already authenticates end users before they reach the
+            // gateway, so skipping device pairing on this Route is not
+            // meaningfully dangerous in practice.
             parsed.gateway.controlUi.dangerouslyDisableDeviceAuth = true;
+          }
+          if (parsed.gateway) {
+            const existingTrustedProxies = Array.isArray(parsed.gateway.trustedProxies)
+              ? parsed.gateway.trustedProxies.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
+              : [];
+            parsed.gateway.trustedProxies = Array.from(new Set([...existingTrustedProxies, "127.0.0.1", "::1"]));
           }
           // Bind to loopback since OAuth proxy fronts the gateway
           if (parsed.gateway) {

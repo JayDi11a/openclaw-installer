@@ -300,8 +300,7 @@ export class KubernetesDeployer implements Deployer {
 
     log(`OpenClaw deployed to ${ns}`);
     log(`Access via port-forward: kubectl port-forward svc/openclaw 18789:18789 -n ${ns}`);
-    // Show URL with token so users can copy-paste after port-forward (fix for #29)
-    log(`Gateway URL (after port-forward): http://localhost:18789#token=${encodeURIComponent(gatewayToken)}`);
+    log("Use the Open action from the Instances page to open with the saved token");
 
     // Save deploy config for re-deploy (strip secrets, keep references)
     try {

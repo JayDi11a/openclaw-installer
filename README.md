@@ -45,7 +45,7 @@ Useful variants:
 | Target | Guide | What it does |
 |--------|-------|-------------|
 | **Kubernetes** | [deploy-kubernetes.md](docs/deploy-kubernetes.md) | Creates namespace, PVC, ConfigMaps, Secrets, Service, and Deployment via the Kubernetes API. The Instances tab can start a managed port-forward and open the UI with the gateway token. |
-| **OpenShift** | [deploy-openshift.md](provider-plugins/openshift/docs/deploy-openshift.md) | Extends Kubernetes with OAuth proxy sidecar, Route, and ServiceAccount. Auto-detected on OpenShift clusters. |
+| **OpenShift** | [deploy-openshift.md](provider-plugins/openshift/docs/deploy-openshift.md) | Extends Kubernetes with OAuth proxy sidecar, Route, and ServiceAccount. |
 | **Local (podman / docker)** | [deploy-local.md](docs/deploy-local.md) | Pulls the image, provisions your agent, starts a container on localhost. Works on macOS and Linux. |
 
 ## Provider Plugins
@@ -154,6 +154,10 @@ After the first deploy, agent files live under `~/.openclaw/workspace-*` on the 
 - for Kubernetes/OpenShift deployments, use Re-deploy
 
 The installer treats the host files as the source of truth and pushes them into the running instance.
+
+For Local deployments, the default is an isolated container data volume for `/home/node/.openclaw`.
+That keeps runtime state, config, pairing data, cron state, and plugin state out of the host
+`~/.openclaw` tree while still syncing host workspaces into the instance on start/redeploy.
 
 ## API
 

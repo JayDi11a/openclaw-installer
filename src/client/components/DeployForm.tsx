@@ -265,7 +265,6 @@ export default function DeployForm({ onDeployStarted }: Props) {
     () => {
       // Hide unavailable plugin deployers (issue #10) — only built-in
       // deployers should appear as disabled; plugin deployers are hidden entirely.
-      // Also hide deployers that have been disabled via the Plugins tab.
       const visible = deployers.filter((d) =>
         d.enabled !== false && (d.builtIn || d.available),
       );
@@ -1261,273 +1260,283 @@ export default function DeployForm({ onDeployStarted }: Props) {
           </div>
         </div>
 
-        {inferenceProvider === "anthropic" && (
-          <div className="form-group">
-            <label>Anthropic API Key</label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              placeholder={defaults?.hasAnthropicKey ? "(using key from environment)" : "sk-ant-..."}
-              value={config.anthropicApiKey}
-              onChange={(e) => update("anthropicApiKey", e.target.value)}
-            />
-            <div className="hint">
-              {defaults?.hasAnthropicKey
-                ? "Detected ANTHROPIC_API_KEY from server environment — leave blank to use it"
-                : "Your Anthropic API key"}
-            </div>
-          </div>
-        )}
+        <details style={{ marginTop: "0.75rem" }}>
+          <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+            Provider Settings
+            <span style={{ color: "var(--text-secondary)", fontWeight: "normal" }}>
+              {" "}Credentials, model, and provider-specific options
+            </span>
+          </summary>
 
-        {inferenceProvider === "openai" && (
-          <div className="form-group">
-            <label>OpenAI API Key</label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              placeholder={defaults?.hasOpenaiKey ? "(using key from environment)" : "sk-..."}
-              value={config.openaiApiKey}
-              onChange={(e) => update("openaiApiKey", e.target.value)}
-            />
-            <div className="hint">
-              {defaults?.hasOpenaiKey
-                ? "Detected OPENAI_API_KEY from server environment — leave blank to use it"
-                : "Your OpenAI API key"}
-            </div>
-          </div>
-        )}
-
-        {isVertex && (
-          <>
-            {inferenceProvider === "vertex-google"
-              && gcpDefaults?.credentialType === "authorized_user"
-              && !config.gcpServiceAccountJson && (
-              <div style={{
-                marginBottom: "1rem",
-                padding: "0.5rem 0.75rem",
-                background: "rgba(231, 76, 60, 0.1)",
-                border: "1px solid rgba(231, 76, 60, 0.3)",
-                borderRadius: "6px",
-                fontSize: "0.85rem",
-                color: "#e74c3c",
-              }}>
-                Your environment credentials are Application Default Credentials (from <code>gcloud auth</code>),
-                which are not supported by Gemini on Vertex. Either upload a Service Account JSON below,
-                or switch to Google Vertex AI (Claude) which works with Application Default Credentials.
+          <div className="card" style={{ marginTop: "0.75rem" }}>
+            {inferenceProvider === "anthropic" && (
+              <div className="form-group">
+                <label>Anthropic API Key</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={defaults?.hasAnthropicKey ? "(using key from environment)" : "sk-ant-..."}
+                  value={config.anthropicApiKey}
+                  onChange={(e) => update("anthropicApiKey", e.target.value)}
+                />
+                <div className="hint">
+                  {defaults?.hasAnthropicKey
+                    ? "Detected ANTHROPIC_API_KEY from server environment — leave blank to use it"
+                    : "Your Anthropic API key"}
+                </div>
               </div>
             )}
 
-            <div className="form-row">
+            {inferenceProvider === "openai" && (
               <div className="form-group">
-                <label>GCP Project ID</label>
+                <label>OpenAI API Key</label>
                 <input
-                  type="text"
-                  placeholder="my-gcp-project"
-                  value={config.googleCloudProject}
-                  onChange={(e) => update("googleCloudProject", e.target.value)}
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={defaults?.hasOpenaiKey ? "(using key from environment)" : "sk-..."}
+                  value={config.openaiApiKey}
+                  onChange={(e) => update("openaiApiKey", e.target.value)}
                 />
-                {gcpDefaults?.sources.projectId && config.googleCloudProject === gcpDefaults.projectId ? (
-                  <div className="hint">from {gcpDefaults.sources.projectId}</div>
-                ) : !config.googleCloudProject && (
-                  <div className="hint">Auto-extracted from credentials JSON if not set</div>
-                )}
+                <div className="hint">
+                  {defaults?.hasOpenaiKey
+                    ? "Detected OPENAI_API_KEY from server environment — leave blank to use it"
+                    : "Your OpenAI API key"}
+                </div>
               </div>
-              <div className="form-group">
-                <label>GCP Region</label>
-                <input
-                  type="text"
-                  placeholder={inferenceProvider === "vertex-anthropic" ? "us-east5 (default)" : "us-central1 (default)"}
-                  value={config.googleCloudLocation}
-                  onChange={(e) => update("googleCloudLocation", e.target.value)}
-                />
-                {gcpDefaults?.sources.location && config.googleCloudLocation === gcpDefaults.location ? (
-                  <div className="hint">from {gcpDefaults.sources.location}</div>
-                ) : !config.googleCloudLocation && (
-                  <div className="hint">
-                    Defaults to {inferenceProvider === "vertex-anthropic" ? "us-east5" : "us-central1"} if not set
+            )}
+
+            {isVertex && (
+              <>
+                {inferenceProvider === "vertex-google"
+                  && gcpDefaults?.credentialType === "authorized_user"
+                  && !config.gcpServiceAccountJson && (
+                  <div style={{
+                    marginBottom: "1rem",
+                    padding: "0.5rem 0.75rem",
+                    background: "rgba(231, 76, 60, 0.1)",
+                    border: "1px solid rgba(231, 76, 60, 0.3)",
+                    borderRadius: "6px",
+                    fontSize: "0.85rem",
+                    color: "#e74c3c",
+                  }}>
+                    Your environment credentials are Application Default Credentials (from <code>gcloud auth</code>),
+                    which are not supported by Gemini on Vertex. Either upload a Service Account JSON below,
+                    or switch to Google Vertex AI (Claude) which works with Application Default Credentials.
                   </div>
                 )}
-              </div>
-            </div>
 
-            <div className="form-group">
-              <label>Google Cloud Credentials (JSON)</label>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                {config.gcpServiceAccountJson ? (
-                  <div
-                    style={{
-                      flex: 1,
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>GCP Project ID</label>
+                    <input
+                      type="text"
+                      placeholder="my-gcp-project"
+                      value={config.googleCloudProject}
+                      onChange={(e) => update("googleCloudProject", e.target.value)}
+                    />
+                    {gcpDefaults?.sources.projectId && config.googleCloudProject === gcpDefaults.projectId ? (
+                      <div className="hint">from {gcpDefaults.sources.projectId}</div>
+                    ) : !config.googleCloudProject && (
+                      <div className="hint">Auto-extracted from credentials JSON if not set</div>
+                    )}
+                  </div>
+                  <div className="form-group">
+                    <label>GCP Region</label>
+                    <input
+                      type="text"
+                      placeholder={inferenceProvider === "vertex-anthropic" ? "us-east5 (default)" : "us-central1 (default)"}
+                      value={config.googleCloudLocation}
+                      onChange={(e) => update("googleCloudLocation", e.target.value)}
+                    />
+                    {gcpDefaults?.sources.location && config.googleCloudLocation === gcpDefaults.location ? (
+                      <div className="hint">from {gcpDefaults.sources.location}</div>
+                    ) : !config.googleCloudLocation && (
+                      <div className="hint">
+                        Defaults to {inferenceProvider === "vertex-anthropic" ? "us-east5" : "us-central1"} if not set
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Google Cloud Credentials (JSON)</label>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    {config.gcpServiceAccountJson ? (
+                      <div
+                        style={{
+                          flex: 1,
+                          padding: "0.5rem 0.75rem",
+                          background: "var(--bg-primary)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          fontFamily: "monospace",
+                          fontSize: "0.85rem",
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        {(() => {
+                          try {
+                            const parsed = JSON.parse(config.gcpServiceAccountJson);
+                            return `${parsed.client_email || "service account"} (${parsed.project_id || "unknown project"})`;
+                          } catch {
+                            return "credentials loaded";
+                          }
+                        })()}
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder={
+                          gcpDefaults?.hasServiceAccountJson
+                            ? `Using credentials from ${gcpDefaults.sources.credentials}`
+                            : "/path/to/service-account.json"
+                        }
+                        value={config.gcpServiceAccountPath}
+                        onChange={(e) => update("gcpServiceAccountPath", e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                    )}
+                    <label
+                      className="btn btn-ghost"
+                      style={{ cursor: "pointer", whiteSpace: "nowrap" }}
+                    >
+                      {config.gcpServiceAccountJson ? "Change" : "Browse"}
+                      <input
+                        type="file"
+                        accept=".json"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const text = reader.result as string;
+                            update("gcpServiceAccountJson", text);
+                            update("gcpServiceAccountPath", "");
+                            if (!config.googleCloudProject) {
+                              try {
+                                const parsed = JSON.parse(text);
+                                if (parsed.project_id) {
+                                  update("googleCloudProject", parsed.project_id);
+                                }
+                              } catch { /* ignore */ }
+                            }
+                          };
+                          reader.readAsText(file);
+                        }}
+                      />
+                    </label>
+                    {config.gcpServiceAccountJson && (
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => update("gcpServiceAccountJson", "")}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="hint">
+                    Type a path to a credentials JSON file, or use Browse to upload one.
+                    {gcpDefaults?.hasServiceAccountJson && !config.gcpServiceAccountJson && !config.gcpServiceAccountPath
+                      && " Leave blank to use credentials detected from environment."}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <input
+                      type="checkbox"
+                      checked={config.litellmProxy}
+                      onChange={(e) =>
+                        setConfig((prev) => ({ ...prev, litellmProxy: e.target.checked }))
+                      }
+                      style={{ width: "auto" }}
+                    />
+                    Use LiteLLM proxy (recommended)
+                  </label>
+                  <div className="hint">
+                    Runs a LiteLLM sidecar that handles Vertex AI authentication.
+                    GCP credentials stay in the proxy container and are never exposed to the agent.
+                    {!config.litellmProxy && (
+                      <span style={{ color: "#e67e22" }}>
+                        {" "}Disabled: credentials will be passed directly to the agent container.
+                      </span>
+                    )}
+                  </div>
+                  {config.litellmProxy && (
+                    <div style={{
+                      marginTop: "0.5rem",
                       padding: "0.5rem 0.75rem",
-                      background: "var(--bg-primary)",
-                      border: "1px solid var(--border)",
+                      background: "rgba(52, 152, 219, 0.1)",
+                      border: "1px solid rgba(52, 152, 219, 0.3)",
                       borderRadius: "6px",
-                      fontFamily: "monospace",
                       fontSize: "0.85rem",
                       color: "var(--text-secondary)",
-                    }}
-                  >
-                    {(() => {
-                      try {
-                        const parsed = JSON.parse(config.gcpServiceAccountJson);
-                        return `${parsed.client_email || "service account"} (${parsed.project_id || "unknown project"})`;
-                      } catch {
-                        return "credentials loaded";
-                      }
-                    })()}
-                  </div>
-                ) : (
+                    }}>
+                      The first deployment will pull both the OpenClaw image and the LiteLLM proxy
+                      image (<code>ghcr.io/berriai/litellm:main-latest</code>, ~1.5 GB).
+                      This may take several minutes. You can pre-pull
+                      with: <code>{mode === "kubernetes" ? "crictl pull" : "podman pull"} ghcr.io/berriai/litellm:main-latest</code>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {inferenceProvider === "custom-endpoint" && (
+              <>
+                <div className="form-group">
+                  <label>Endpoint URL</label>
                   <input
                     type="text"
-                    placeholder={
-                      gcpDefaults?.hasServiceAccountJson
-                        ? `Using credentials from ${gcpDefaults.sources.credentials}`
-                        : "/path/to/service-account.json"
-                    }
-                    value={config.gcpServiceAccountPath}
-                    onChange={(e) => update("gcpServiceAccountPath", e.target.value)}
-                    style={{ flex: 1 }}
+                    placeholder="http://vllm.openclaw-llms.svc.cluster.local/v1"
+                    value={config.modelEndpoint}
+                    onChange={(e) => update("modelEndpoint", e.target.value)}
                   />
-                )}
-                <label
-                  className="btn btn-ghost"
-                  style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                >
-                  {config.gcpServiceAccountJson ? "Change" : "Browse"}
-                  <input
-                    type="file"
-                    accept=".json"
-                    style={{ display: "none" }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        const text = reader.result as string;
-                        update("gcpServiceAccountJson", text);
-                        update("gcpServiceAccountPath", "");
-                        // Auto-fill project ID if empty
-                        if (!config.googleCloudProject) {
-                          try {
-                            const parsed = JSON.parse(text);
-                            if (parsed.project_id) {
-                              update("googleCloudProject", parsed.project_id);
-                            }
-                          } catch { /* ignore */ }
-                        }
-                      };
-                      reader.readAsText(file);
-                    }}
-                  />
-                </label>
-                {config.gcpServiceAccountJson && (
-                  <button
-                    className="btn btn-ghost"
-                    onClick={() => update("gcpServiceAccountJson", "")}
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-              <div className="hint">
-                Type a path to a credentials JSON file, or use Browse to upload one.
-                {gcpDefaults?.hasServiceAccountJson && !config.gcpServiceAccountJson && !config.gcpServiceAccountPath
-                  && " Leave blank to use credentials detected from environment."}
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <input
-                  type="checkbox"
-                  checked={config.litellmProxy}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, litellmProxy: e.target.checked }))
-                  }
-                  style={{ width: "auto" }}
-                />
-                Use LiteLLM proxy (recommended)
-              </label>
-              <div className="hint">
-                Runs a LiteLLM sidecar that handles Vertex AI authentication.
-                GCP credentials stay in the proxy container and are never exposed to the agent.
-                {!config.litellmProxy && (
-                  <span style={{ color: "#e67e22" }}>
-                    {" "}Disabled: credentials will be passed directly to the agent container.
-                  </span>
-                )}
-              </div>
-              {config.litellmProxy && (
-                <div style={{
-                  marginTop: "0.5rem",
-                  padding: "0.5rem 0.75rem",
-                  background: "rgba(52, 152, 219, 0.1)",
-                  border: "1px solid rgba(52, 152, 219, 0.3)",
-                  borderRadius: "6px",
-                  fontSize: "0.85rem",
-                  color: "var(--text-secondary)",
-                }}>
-                  The first deployment will pull both the OpenClaw image and the LiteLLM proxy
-                  image (<code>ghcr.io/berriai/litellm:main-latest</code>, ~1.5 GB).
-                  This may take several minutes. You can pre-pull
-                  with: <code>{mode === "kubernetes" ? "crictl pull" : "podman pull"} ghcr.io/berriai/litellm:main-latest</code>
+                  <div className="hint">
+                    OpenAI-compatible endpoint URL for your self-hosted model server
+                  </div>
                 </div>
-              )}
-            </div>
-          </>
-        )}
+                <div className="form-group">
+                  <label>API Key</label>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder={defaults?.hasOpenaiKey ? "(using key from environment)" : "Optional — if your endpoint requires auth"}
+                    value={config.openaiApiKey}
+                    onChange={(e) => update("openaiApiKey", e.target.value)}
+                  />
+                  <div className="hint">
+                    {defaults?.hasOpenaiKey
+                      ? "Detected OPENAI_API_KEY from server environment — leave blank to use it"
+                      : "Sent as the Bearer token to your endpoint (leave blank if not required)"}
+                  </div>
+                </div>
+              </>
+            )}
 
-        {inferenceProvider === "custom-endpoint" && (
-          <>
             <div className="form-group">
-              <label>Endpoint URL</label>
+              <label>Model</label>
               <input
                 type="text"
-                placeholder="http://vllm.openclaw-llms.svc.cluster.local/v1"
-                value={config.modelEndpoint}
-                onChange={(e) => update("modelEndpoint", e.target.value)}
+                placeholder={
+                  isVertex && config.litellmProxy
+                    ? (inferenceProvider === "vertex-anthropic" ? "claude-sonnet-4-6" : "gemini-2.5-pro")
+                    : (MODEL_DEFAULTS[inferenceProvider] || "model-id")
+                }
+                value={config.agentModel}
+                onChange={(e) => update("agentModel", e.target.value)}
               />
               <div className="hint">
-                OpenAI-compatible endpoint URL for your self-hosted model server
+                {config.agentModel
+                  ? "Custom model override"
+                  : isVertex && config.litellmProxy
+                    ? `Leave blank for default (routed through LiteLLM proxy). ${PROXY_MODEL_HINTS[inferenceProvider] || MODEL_HINTS[inferenceProvider]}`
+                    : `Leave blank for default${MODEL_DEFAULTS[inferenceProvider] ? ` (${MODEL_DEFAULTS[inferenceProvider]})` : ""}. ${MODEL_HINTS[inferenceProvider]}`}
               </div>
             </div>
-            <div className="form-group">
-              <label>API Key</label>
-              <input
-                type="password"
-                autoComplete="new-password"
-                placeholder={defaults?.hasOpenaiKey ? "(using key from environment)" : "Optional — if your endpoint requires auth"}
-                value={config.openaiApiKey}
-                onChange={(e) => update("openaiApiKey", e.target.value)}
-              />
-              <div className="hint">
-                {defaults?.hasOpenaiKey
-                  ? "Detected OPENAI_API_KEY from server environment — leave blank to use it"
-                  : "Sent as the Bearer token to your endpoint (leave blank if not required)"}
-              </div>
-            </div>
-          </>
-        )}
-
-        <div className="form-group">
-          <label>Model</label>
-          <input
-            type="text"
-            placeholder={
-              isVertex && config.litellmProxy
-                ? (inferenceProvider === "vertex-anthropic" ? "claude-sonnet-4-6" : "gemini-2.5-pro")
-                : (MODEL_DEFAULTS[inferenceProvider] || "model-id")
-            }
-            value={config.agentModel}
-            onChange={(e) => update("agentModel", e.target.value)}
-          />
-          <div className="hint">
-            {config.agentModel
-              ? "Custom model override"
-              : isVertex && config.litellmProxy
-                ? `Leave blank for default (routed through LiteLLM proxy). ${PROXY_MODEL_HINTS[inferenceProvider] || MODEL_HINTS[inferenceProvider]}`
-                : `Leave blank for default${MODEL_DEFAULTS[inferenceProvider] ? ` (${MODEL_DEFAULTS[inferenceProvider]})` : ""}. ${MODEL_HINTS[inferenceProvider]}`}
           </div>
-        </div>
+        </details>
 
         <h3 style={{ marginTop: "1.5rem" }}>Observability</h3>
 
