@@ -40,7 +40,7 @@ describe("checkPortAvailable", () => {
     });
 
     // Mock the runtime ps command to return a container using this port
-    mockExecFile.mockImplementation((_file: string, _args: string[], cb: Function) => {
+    mockExecFile.mockImplementation((_file: string, _args: string[], cb: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
       cb(null, {
         stdout: `openclaw-bob-agent\t0.0.0.0:${boundPort}->18789/tcp`,
         stderr: "",
@@ -63,7 +63,7 @@ describe("checkPortAvailable", () => {
     });
 
     // Mock the runtime ps command to fail
-    mockExecFile.mockImplementation((_file: string, _args: string[], cb: Function) => {
+    mockExecFile.mockImplementation((_file: string, _args: string[], cb: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
       cb(new Error("podman not found"), { stdout: "", stderr: "" });
     });
 
@@ -83,7 +83,7 @@ describe("checkPortAvailable", () => {
     });
 
     // Mock: runtime returns containers but none match this port
-    mockExecFile.mockImplementation((_file: string, _args: string[], cb: Function) => {
+    mockExecFile.mockImplementation((_file: string, _args: string[], cb: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
       cb(null, {
         stdout: "some-container\t0.0.0.0:9999->80/tcp",
         stderr: "",
