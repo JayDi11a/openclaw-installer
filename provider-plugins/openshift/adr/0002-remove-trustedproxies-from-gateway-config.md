@@ -1,4 +1,4 @@
-# ADR 0002: Remove trustedProxies from OpenShift Gateway Config
+# ADR 0002: Auto-approve Internal Device Pairing on OpenShift
 
 ## Status
 
@@ -6,123 +6,105 @@ Accepted
 
 ## Context
 
-The OpenShift deployer patches the gateway's `openclaw.json` ConfigMap after
-the base Kubernetes deployer creates it. One of the patches added
-`gateway.trustedProxies: ["127.0.0.1", "::1"]`, telling the gateway to treat
-connections from localhost as coming from a reverse proxy and to look at
-`X-Forwarded-For` headers for the real client IP.
+After deploying to OpenShift with a multi-agent bundle, the gateway's internal
+client (the agent subprocess) creates an operator device pairing request on
+startup. That request stays pending forever — nothing auto-approves it. This
+blocks subagent delegation with `gateway closed (1008): pairing required`
+(issue #69).
 
-This was added because the OAuth proxy sidecar sits in front of the gateway
-and forwards traffic from `localhost:8443` to `localhost:18789`. The intent
-was correct: "we have a proxy, so configure proxy trust."
+### Why auto-pairing doesn't work
 
-However, this setting breaks subagent spawning (issue #69). Here is the
-failure chain:
+The gateway normally auto-approves device pairing for localhost connections via
+`shouldAllowSilentLocalPairing`. However, the OpenShift deployer sets
+`gateway.trustedProxies: ["127.0.0.1", "::1"]` so the gateway correctly
+handles `X-Forwarded-For` headers from the OAuth proxy sidecar.
 
-1. The agent subprocess calls `callGateway()` to spawn a subagent, opening a
-   WebSocket to the gateway at `ws://127.0.0.1:18789` with role `"node"`.
-2. The gateway sees the connection from `127.0.0.1` and checks `trustedProxies`.
-3. `127.0.0.1` is listed, so `resolveClientIp()` treats it as a proxy — it
-   looks for `X-Forwarded-For` headers. The agent subprocess doesn't set any
-   (it's a direct connection), so `resolveClientIp()` returns `undefined`.
-4. `shouldAllowSilentLocalPairing()` checks the resolved client IP. It's
-   `undefined`, not a loopback address, so it returns `false`.
-5. Device pairing stays pending forever. The agent subprocess can't talk to
-   the gateway, and subagent delegation fails with
-   `gateway closed (1008): pairing required`.
+This has a side effect: when the agent subprocess calls `callGateway()` to
+spawn a subagent, it opens a WebSocket to the gateway at `127.0.0.1:18789`
+**without** `X-Forwarded-For` headers (it's a direct connection, not proxied).
+The gateway's `resolveClientIp()` sees the remote address is a trusted proxy,
+looks for forwarding headers, finds none, and returns `undefined`. With an
+undefined client IP, `shouldAllowSilentLocalPairing` returns `false` and the
+pairing stays pending.
 
-The `dangerouslyDisableDeviceAuth: true` flag does not help here — it only
-bypasses device identity checks for Control UI (operator-role) connections,
-not for node-role connections like the agent subprocess.
+The `dangerouslyDisableDeviceAuth: true` flag does not help — it only bypasses
+device identity checks for Control UI (operator-role) connections, not for
+node-role connections like the agent subprocess.
 
-The local deployer does not set `trustedProxies` and does not have this
-problem. Localhost auto-pairing works correctly there.
+### Why we can't just remove trustedProxies
+
+Removing `trustedProxies` was attempted but causes a different failure: the
+OAuth proxy forwards requests with `X-Forwarded-For` headers, and without
+`trustedProxies` the gateway logs "Proxy headers detected from untrusted
+address" and refuses to treat the connection as local. The Control UI gets
+stuck at the gateway login screen.
+
+Both the OAuth proxy and agent subprocess connect from `127.0.0.1`, but one
+has proxy headers and one doesn't. The `trustedProxies` setting is necessary
+for the OAuth proxy path.
 
 ## Decision
 
-Remove `gateway.trustedProxies` from the OpenShift ConfigMap patch entirely.
+Keep `trustedProxies` and add a Kubernetes lifecycle `postStart` hook to the
+gateway container that auto-approves the internal device pairing after the
+gateway starts.
+
+The hook:
+
+1. Waits up to 30 seconds for the gateway to be listening on port 18789
+2. Runs `openclaw devices approve --latest` to approve the pending pairing
+
+This matches the manual fix that was verified to work on OpenShift (ROSA):
+after running `openclaw devices approve --latest`, the gateway becomes
+reachable and subagent delegation works immediately.
 
 ## Rationale
 
-### The setting provides no meaningful security value in this deployment
+### The postStart hook is the right scope
 
-The gateway binds to loopback (`--bind loopback`). Nothing outside the pod
-can connect to port 18789. The only processes that reach the gateway are:
+- It runs once per pod start, which is exactly when the pairing request is
+  created
+- It runs inside the gateway container, so the `openclaw` CLI is available
+- It runs concurrently with the main process, so there's minimal startup delay
+- If it fails (gateway takes too long to start), the `|| true` prevents the
+  container from crashing — the pairing just stays pending as before
 
-- The OAuth proxy sidecar (same pod, localhost)
-- The agent subprocess (spawned by the gateway itself, localhost)
+### Alternatives considered
 
-There is no external attack surface on the gateway port. The `trustedProxies`
-feature is designed to prevent header spoofing when the gateway is exposed to
-a network — but when the gateway is on loopback, all connections are already
-internal and there is nothing to spoof.
+**Remove `trustedProxies`** — Breaks the OAuth proxy connection path. The
+gateway rejects proxy headers from untrusted addresses.
 
-### Security is handled by other layers
+**`allowRealIpFallback: true`** — A gateway config option that falls back to
+the socket address when `X-Forwarded-For` is missing from a trusted proxy.
+This would be the cleanest fix but depends on the gateway version supporting
+this option, which is not guaranteed across all deployments.
 
-| Layer                          | What it does                                | Needs trustedProxies? |
-| ------------------------------ | ------------------------------------------- | --------------------- |
-| OpenShift Route + OAuth proxy  | Authenticates users via SSO                 | No                    |
-| Gateway token auth             | Requires OPENCLAW_GATEWAY_TOKEN for WebSocket | No                    |
-| Loopback binding               | Prevents external connections to gateway    | No                    |
-| K8s network policies           | Isolates pod traffic                        | No                    |
+**Separate listener** — Bind the gateway on two ports: one for the OAuth proxy
+(with proxy trust), one for the agent subprocess (without). This is a larger
+architectural change than needed for this bug.
 
-### What we lose
-
-The gateway will see `127.0.0.1` as the client IP for all connections
-(both OAuth-proxied and direct). This means:
-
-- **Logging**: Gateway logs show `127.0.0.1` instead of real user IPs. This
-  is a minor diagnostics trade-off. The OAuth proxy's own logs still contain
-  real client IPs.
-- **IP-based policies**: If the gateway ever added IP-based access rules,
-  they wouldn't distinguish clients. But the current deployment uses token
-  auth, not IP-based auth.
-
-### What we gain
-
-Localhost auto-pairing works correctly for all connection roles (operator and
-node). The agent subprocess's `callGateway()` connections are recognized as
-local, `shouldAllowSilentLocalPairing()` returns `true`, and subagent
-delegation works without manual intervention.
-
-## Alternatives Considered
-
-### Auto-approve pairing in the bootstrap script
-
-Run `openclaw devices approve --latest` after the gateway starts. This works
-(confirmed by manual testing on OpenShift) but is a workaround — it doesn't
-fix the root cause, adds timing complexity (must wait for gateway readiness),
-and would need to run on every pod restart.
-
-### Set allowRealIpFallback: true
-
-Keep `trustedProxies` but configure the gateway to fall back to the remote
-address when `X-Forwarded-For` is missing. This preserves proxy header trust
-while fixing agent subprocess auto-pairing. However, this is a gateway-level
-config option that may not be available in all versions, and it adds
-complexity for no security benefit given the loopback binding.
-
-### Switch to auth.mode: trusted-proxy
-
-Change the gateway to fully delegate auth to the OAuth proxy. This is a
-larger change requiring the OAuth proxy to pass user identity headers
-(`X-Forwarded-User`) and the gateway to be configured with
-`auth.trustedProxy.userHeader`. It would be the right approach if we wanted
-to eliminate the gateway token entirely, but it's a bigger architectural
-change than needed to fix this bug.
+**Switch to `auth.mode: "trusted-proxy"`** — Fully delegate auth to the OAuth
+proxy. Requires the OAuth proxy to pass user identity headers and the gateway
+to be configured with `auth.trustedProxy.userHeader`. A bigger change that
+also modifies the auth model.
 
 ## Consequences
 
 ### Positive
 
 - Subagent spawning works on OpenShift without manual intervention
-- Brings OpenShift config closer to parity with the working local deployer
-- Removes a config interaction that is easy to misunderstand
+- No changes to the gateway config or auth model
+- The fix is self-contained in the Deployment patch
+- If the gateway adds native support for `allowRealIpFallback` or similar,
+  the postStart hook can be removed without other changes
 
 ### Negative
 
-- Gateway logs lose real client IPs (mitigated by OAuth proxy logs)
-- If a future use case needs the gateway to distinguish real client IPs
-  behind the proxy, `trustedProxies` would need to be re-added along with a
-  mechanism to preserve agent subprocess auto-pairing (e.g.,
-  `allowRealIpFallback` or a separate internal listener)
+- Adds a timing dependency: the postStart hook must complete before the
+  gateway's readiness probe timeout. The 30-second retry loop and the
+  readiness probe's 30-second `initialDelaySeconds` should provide enough
+  margin.
+- The `openclaw devices approve --latest` command approves the most recent
+  pending pairing request. In a single-pod deployment this is always the
+  gateway's internal client, but the approach assumes no other pending
+  requests exist at startup.
