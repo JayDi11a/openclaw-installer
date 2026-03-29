@@ -25,20 +25,16 @@ interface ProviderSectionProps {
   mode: string;
   modelEndpointOptions: ModelEndpointOption[];
   modelEndpointOptionsError: string | null;
-  fetchAnthropicModels: () => Promise<void>;
-  fetchOpenaiModels: () => Promise<void>;
   loadingAnthropicModels: boolean;
   loadingOpenaiModels: boolean;
   anthropicModelOptions: Array<{ id: string; name: string }>;
   openaiModelOptions: Array<{ id: string; name: string }>;
   anthropicModelsError: string | null;
   openaiModelsError: string | null;
-  fetchVertexAnthropicModels: () => Promise<void>;
   loadingVertexAnthropicModels: boolean;
   vertexAnthropicModelOptions: Array<{ id: string; name: string }>;
   vertexAnthropicModelsError: string | null;
   vertexAnthropicModelsWarning: string | null;
-  fetchVertexGoogleModels: () => Promise<void>;
   loadingVertexGoogleModels: boolean;
   vertexGoogleModelOptions: Array<{ id: string; name: string }>;
   vertexGoogleModelsError: string | null;
@@ -72,20 +68,16 @@ export function ProviderSection({
   mode,
   modelEndpointOptions,
   modelEndpointOptionsError,
-  fetchAnthropicModels,
-  fetchOpenaiModels,
   loadingAnthropicModels,
   loadingOpenaiModels,
   anthropicModelOptions,
   openaiModelOptions,
   anthropicModelsError,
   openaiModelsError,
-  fetchVertexAnthropicModels,
   loadingVertexAnthropicModels,
   vertexAnthropicModelOptions,
   vertexAnthropicModelsError,
   vertexAnthropicModelsWarning,
-  fetchVertexGoogleModels,
   loadingVertexGoogleModels,
   vertexGoogleModelOptions,
   vertexGoogleModelsError,
@@ -145,23 +137,15 @@ export function ProviderSection({
               </div>
             </div>
             <div className="form-group">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <label>Anthropic Model</label>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
-                  onClick={fetchAnthropicModels}
-                  disabled={loadingAnthropicModels}
-                >
-                  {loadingAnthropicModels ? "Fetching..." : "Browse Models"}
-                </button>
-              </div>
+              <label>Anthropic Model</label>
+              {loadingAnthropicModels && (
+                <div className="hint">Loading models...</div>
+              )}
               {anthropicModelsError && (
                 <div className="hint" style={{ color: "#e74c3c" }}>{anthropicModelsError}</div>
               )}
               {anthropicModelOptions.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.5rem", maxHeight: "200px", overflowY: "auto", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.5rem", maxHeight: "150px", overflowY: "auto", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem" }}>
                   {anthropicModelOptions.map((option) => {
                     const isSelected = config.anthropicModel === option.id || config.anthropicModels.includes(option.id);
                     return (
@@ -276,23 +260,15 @@ export function ProviderSection({
               </div>
             </div>
             <div className="form-group">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <label>OpenAI Model</label>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
-                  onClick={fetchOpenaiModels}
-                  disabled={loadingOpenaiModels}
-                >
-                  {loadingOpenaiModels ? "Fetching..." : "Browse Models"}
-                </button>
-              </div>
+              <label>OpenAI Model</label>
+              {loadingOpenaiModels && (
+                <div className="hint">Loading models...</div>
+              )}
               {openaiModelsError && (
                 <div className="hint" style={{ color: "#e74c3c" }}>{openaiModelsError}</div>
               )}
               {openaiModelOptions.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.5rem", maxHeight: "200px", overflowY: "auto", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.5rem", maxHeight: "150px", overflowY: "auto", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem" }}>
                   {openaiModelOptions.map((option) => {
                     const isSelected = config.openaiModel === option.id || config.openaiModels.includes(option.id);
                     return (
@@ -534,7 +510,6 @@ export function ProviderSection({
               const modelsValue = isVertexAnthropic ? config.vertexAnthropicModels : config.vertexGoogleModels;
               const placeholder = isVertexAnthropic ? "claude-sonnet-4-6" : "gemini-2.5-pro";
               const addPlaceholder = isVertexAnthropic ? "e.g., claude-opus-4-6" : "e.g., gemini-2.5-flash";
-              const fetchFn = isVertexAnthropic ? fetchVertexAnthropicModels : fetchVertexGoogleModels;
               const loading = isVertexAnthropic ? loadingVertexAnthropicModels : loadingVertexGoogleModels;
               const options = isVertexAnthropic ? vertexAnthropicModelOptions : vertexGoogleModelOptions;
               const error = isVertexAnthropic ? vertexAnthropicModelsError : vertexGoogleModelsError;
@@ -542,18 +517,10 @@ export function ProviderSection({
               return (
                 <>
                   <div className="form-group">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <label>Model</label>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
-                        onClick={fetchFn}
-                        disabled={loading}
-                      >
-                        {loading ? "Fetching..." : "Browse Models"}
-                      </button>
-                    </div>
+                    <label>Model</label>
+                    {loading && (
+                      <div className="hint">Loading models...</div>
+                    )}
                     {error && (
                       <div className="hint" style={{ color: "#e74c3c" }}>{error}</div>
                     )}
@@ -561,7 +528,7 @@ export function ProviderSection({
                       <div className="hint">{warning}</div>
                     )}
                     {options.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.5rem", maxHeight: "200px", overflowY: "auto", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.5rem", maxHeight: "150px", overflowY: "auto", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem" }}>
                         {options.map((option) => {
                           const isSelected = modelValue === option.id || modelsValue.includes(option.id);
                           return (

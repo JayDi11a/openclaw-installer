@@ -539,6 +539,39 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
     }
   };
 
+  // Auto-fetch model lists when credentials become available
+  const anthropicKeyForFetch = config.anthropicApiKey.trim() || (defaults?.hasAnthropicKey ? "__env__" : "");
+  const prevAnthropicKeyRef = useRef("");
+  useEffect(() => {
+    if (anthropicKeyForFetch && anthropicKeyForFetch !== prevAnthropicKeyRef.current) {
+      prevAnthropicKeyRef.current = anthropicKeyForFetch;
+      fetchAnthropicModelOptions();
+    }
+  }, [anthropicKeyForFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openaiKeyForFetch = config.openaiApiKey.trim() || (defaults?.hasOpenaiKey ? "__env__" : "");
+  const prevOpenaiKeyRef = useRef("");
+  useEffect(() => {
+    if (openaiKeyForFetch && openaiKeyForFetch !== prevOpenaiKeyRef.current) {
+      prevOpenaiKeyRef.current = openaiKeyForFetch;
+      fetchOpenaiModelOptions();
+    }
+  }, [openaiKeyForFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const vertexCredsForFetch = (config.gcpServiceAccountJson || gcpDefaults?.hasServiceAccountJson ? "has-creds" : "")
+    + "|" + (config.googleCloudProject || gcpDefaults?.projectId || "")
+    + "|" + (config.googleCloudLocation || gcpDefaults?.location || "");
+  const prevVertexCredsRef = useRef("");
+  useEffect(() => {
+    const hasCreds = config.gcpServiceAccountJson || gcpDefaults?.hasServiceAccountJson;
+    const hasProject = config.googleCloudProject || gcpDefaults?.projectId;
+    if (hasCreds && hasProject && vertexCredsForFetch !== prevVertexCredsRef.current) {
+      prevVertexCredsRef.current = vertexCredsForFetch;
+      fetchVertexAnthropicModelOptions();
+      fetchVertexGoogleModelOptions();
+    }
+  }, [vertexCredsForFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleDeploy = async () => {
     if (!isValid) {
       return;
@@ -1115,20 +1148,16 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
           setConfig={setConfig}
           setInferenceProvider={setInferenceProvider}
           update={update}
-          fetchAnthropicModels={fetchAnthropicModelOptions}
-          fetchOpenaiModels={fetchOpenaiModelOptions}
           loadingAnthropicModels={loadingAnthropicModels}
           loadingOpenaiModels={loadingOpenaiModels}
           anthropicModelOptions={anthropicModelOptions}
           openaiModelOptions={openaiModelOptions}
           anthropicModelsError={anthropicModelsError}
           openaiModelsError={openaiModelsError}
-          fetchVertexAnthropicModels={fetchVertexAnthropicModelOptions}
           loadingVertexAnthropicModels={loadingVertexAnthropicModels}
           vertexAnthropicModelOptions={vertexAnthropicModelOptions}
           vertexAnthropicModelsError={vertexAnthropicModelsError}
           vertexAnthropicModelsWarning={vertexAnthropicModelsWarning}
-          fetchVertexGoogleModels={fetchVertexGoogleModelOptions}
           loadingVertexGoogleModels={loadingVertexGoogleModels}
           vertexGoogleModelOptions={vertexGoogleModelOptions}
           vertexGoogleModelsError={vertexGoogleModelsError}

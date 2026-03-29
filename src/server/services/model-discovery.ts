@@ -28,8 +28,20 @@ export async function fetchAnthropicModels(apiKey: string): Promise<ModelEndpoin
 }
 
 // Keywords indicating non-chat models that aren't useful for agent inference
-// Keywords indicating non-chat models that aren't useful for agent inference
 const OPENAI_EXCLUDE_PATTERNS = /\b(embedding|tts|whisper|dall-e|moderation|realtime|audio|search|babbage|davinci|canary|transcribe|instruct|image|sora)\b|^ft:/i;
+
+// Models known not to work with OpenClaw (not in its model registry)
+const OPENAI_EXCLUDE_MODELS = new Set([
+  "gpt-3.5-turbo",
+  "gpt-3.5-turbo-0125",
+  "gpt-3.5-turbo-1106",
+  "gpt-3.5-turbo-16k",
+  "gpt-4-0613",
+  "computer-use-preview",
+  "computer-use-preview-2025-03-11",
+  "o1-2024-12-17",
+  "o3-2025-04-16",
+]);
 
 // Date suffix pattern (e.g., -2024-08-06, -20250514)
 const DATE_SUFFIX = /-\d{4}(-\d{2}(-\d{2})?)?$|-\d{8}$/;
@@ -51,6 +63,7 @@ export async function fetchOpenaiModels(apiKey: string): Promise<ModelEndpointCa
     const id = typeof entry.id === "string" ? entry.id.trim() : "";
     if (!id || seen.has(id)) continue;
     if (OPENAI_EXCLUDE_PATTERNS.test(id)) continue;
+    if (OPENAI_EXCLUDE_MODELS.has(id)) continue;
     seen.add(id);
     models.push({ id, name: id });
   }
