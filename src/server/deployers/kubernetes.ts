@@ -15,7 +15,7 @@ import type {
 } from "./types.js";
 import { namespaceName, agentId, deriveModel, detectUnavailableProvider, generateToken, usesDefaultEnvSecretRef } from "./k8s-helpers.js";
 import { loadWorkspaceFiles } from "./k8s-agent.js";
-import { loadAgentSourceBundle, loadAgentSourceCronJobs, loadAgentSourceWorkspaceTree, mainWorkspaceShellCondition } from "./agent-source.js";
+import { loadAgentSourceBundle, loadAgentSourceCronJobs, loadAgentSourceExecApprovals, loadAgentSourceWorkspaceTree, mainWorkspaceShellCondition } from "./agent-source.js";
 import {
   namespaceManifest,
   pvcManifest,
@@ -132,6 +132,7 @@ export class KubernetesDeployer implements Deployer {
     const agentTreeEntries = await loadAgentSourceWorkspaceTree(config.agentSourceDir).catch(() => []);
     const cronJobsContent = loadAgentSourceCronJobs(config.agentSourceDir)
       ?? await readFile(cronJobsFile(), "utf8").catch(() => undefined);
+    const execApprovalsContent = loadAgentSourceExecApprovals(config.agentSourceDir);
 
     // 1. Namespace
     await applyNamespace(core, ns, log);
@@ -278,6 +279,15 @@ export class KubernetesDeployer implements Deployer {
       log,
     );
 
+    const execApprovalsCm = fileConfigMapManifest(ns, "openclaw-exec-approvals", "exec-approvals.json", execApprovalsContent);
+    await applyResource(
+      () => core.readNamespacedConfigMap({ name: "openclaw-exec-approvals", namespace: ns }),
+      () => core.createNamespacedConfigMap({ namespace: ns, body: execApprovalsCm }),
+      () => core.replaceNamespacedConfigMap({ name: "openclaw-exec-approvals", namespace: ns, body: execApprovalsCm }),
+      "ConfigMap openclaw-exec-approvals",
+      log,
+    );
+
     // 4b. LiteLLM proxy config (when using Vertex via proxy)
     const useProxy = shouldUseLitellmProxy(config);
     const litellmMasterKey = useProxy ? generateLitellmMasterKey() : undefined;
@@ -388,7 +398,7 @@ export class KubernetesDeployer implements Deployer {
     );
 
     // 7. Deployment
-    const dep = deploymentManifest(ns, config, otelViaOperator, effectiveSkillEntries, agentTreeEntries, cronJobsContent);
+    const dep = deploymentManifest(ns, config, otelViaOperator, effectiveSkillEntries, agentTreeEntries, cronJobsContent, execApprovalsContent);
     await applyResource(
       () => apps.readNamespacedDeployment({ name: "openclaw", namespace: ns }),
       () => apps.createNamespacedDeployment({ namespace: ns, body: dep }),
@@ -545,6 +555,7 @@ export class KubernetesDeployer implements Deployer {
     const agentTreeEntries = await loadAgentSourceWorkspaceTree(result.config.agentSourceDir).catch(() => []);
     const cronJobsContent = loadAgentSourceCronJobs(result.config.agentSourceDir)
       ?? await readFile(cronJobsFile(), "utf8").catch(() => undefined);
+    const execApprovalsContent = loadAgentSourceExecApprovals(result.config.agentSourceDir);
     if (!fromHost) {
       log("No custom agent files found — using generated defaults");
     }
@@ -583,6 +594,15 @@ export class KubernetesDeployer implements Deployer {
       () => core.createNamespacedConfigMap({ namespace: ns, body: cronCm }),
       () => core.replaceNamespacedConfigMap({ name: "openclaw-cron", namespace: ns, body: cronCm }),
       "ConfigMap openclaw-cron",
+      log,
+    );
+
+    const execApprovalsCm = fileConfigMapManifest(ns, "openclaw-exec-approvals", "exec-approvals.json", execApprovalsContent);
+    await applyResource(
+      () => core.readNamespacedConfigMap({ name: "openclaw-exec-approvals", namespace: ns }),
+      () => core.createNamespacedConfigMap({ namespace: ns, body: execApprovalsCm }),
+      () => core.replaceNamespacedConfigMap({ name: "openclaw-exec-approvals", namespace: ns, body: execApprovalsCm }),
+      "ConfigMap openclaw-exec-approvals",
       log,
     );
 
@@ -643,7 +663,7 @@ echo "Config initialized"
       },
       {
         op: "replace",
-        path: "/spec/template/spec/volumes/5/configMap",
+        path: "/spec/template/spec/volumes/6/configMap",
         value: {
           name: "openclaw-agent-tree",
           ...(agentTreeEntries.length > 0
@@ -683,6 +703,7 @@ echo "Config initialized"
       { name: "ConfigMap openclaw-agent-tree", fn: () => core.deleteNamespacedConfigMap({ name: "openclaw-agent-tree", namespace: ns }) },
       { name: "ConfigMap openclaw-skills", fn: () => core.deleteNamespacedConfigMap({ name: "openclaw-skills", namespace: ns }) },
       { name: "ConfigMap openclaw-cron", fn: () => core.deleteNamespacedConfigMap({ name: "openclaw-cron", namespace: ns }) },
+      { name: "ConfigMap openclaw-exec-approvals", fn: () => core.deleteNamespacedConfigMap({ name: "openclaw-exec-approvals", namespace: ns }) },
       { name: "ConfigMap environments", fn: () => core.deleteNamespacedConfigMap({ name: "environments", namespace: ns }) },
       { name: "ConfigMap authbridge-config", fn: () => core.deleteNamespacedConfigMap({ name: "authbridge-config", namespace: ns }) },
       { name: "ConfigMap envoy-config", fn: () => core.deleteNamespacedConfigMap({ name: "envoy-config", namespace: ns }) },

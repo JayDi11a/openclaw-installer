@@ -85,3 +85,30 @@ export function loadAgentSourceCronJobs(agentSourceDir?: string): string | undef
     return undefined;
   }
 }
+
+export function loadAgentSourceMcpServers(agentSourceDir?: string): Record<string, unknown> | undefined {
+  if (!agentSourceDir) return undefined;
+  const mcpPath = join(agentSourceDir, "mcp.json");
+  if (!existsSync(mcpPath)) return undefined;
+  try {
+    const parsed = JSON.parse(readFileSync(mcpPath, "utf8"));
+    const servers = parsed.mcpServers || parsed;
+    if (typeof servers === "object" && servers !== null && !Array.isArray(servers) && Object.keys(servers).length > 0) {
+      return servers as Record<string, unknown>;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function loadAgentSourceExecApprovals(agentSourceDir?: string): string | undefined {
+  if (!agentSourceDir) return undefined;
+  const approvalsPath = join(agentSourceDir, "exec-approvals.json");
+  if (!existsSync(approvalsPath)) return undefined;
+  try {
+    return readFileSync(approvalsPath, "utf8");
+  } catch {
+    return undefined;
+  }
+}

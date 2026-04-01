@@ -128,6 +128,7 @@ For upstream sandbox concepts and backend behavior, see the [OpenClaw sandboxing
 Try:
 
 - `demos/openclaw-builder-research-ops`
+- `demos/software-qa-mcp`
 
 This demo includes:
 
@@ -141,10 +142,49 @@ This demo includes:
 Other `workspace-*` directories are copied through as named agent workspaces and can be
 registered as additional agents through `openclaw-agents.json`.
 
+The `software-qa-mcp` demo includes:
+
+- `mcp.json` for DeepWiki and Context7 MCP servers
+- `exec-approvals.json` for baseline tool approval policy
+- `workspace-main/` with a software Q&A agent persona
+
 Environment templates are included too:
 
 - `.env.example` for a generic installer setup
 - `demos/openclaw-builder-research-ops/.env.example` for the bundled sandbox demo
+
+## MCP Servers
+
+The installer supports provisioning MCP servers through the Agent Source Directory. Place a `mcp.json` file in your agent source directory:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+The installer merges these into the generated `openclaw.json` at deploy time.
+
+For tool approval policies, add an `exec-approvals.json`:
+
+```json
+{
+  "version": 1,
+  "defaults": {
+    "security": "allowlist",
+    "ask": "on-miss",
+    "askFallback": "deny"
+  }
+}
+```
+
+This file is copied directly to `~/.openclaw/exec-approvals.json` in the deployed instance.
+
+See `demos/software-qa-mcp` for a complete example.
 
 ## Agent Workspaces
 

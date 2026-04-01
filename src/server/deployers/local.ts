@@ -46,7 +46,7 @@ import {
 } from "./k8s-helpers.js";
 import { buildSandboxConfig } from "./sandbox.js";
 import { buildSandboxToolPolicy } from "./tool-policy.js";
-import { loadAgentSourceBundle, mainWorkspaceShellCondition } from "./agent-source.js";
+import { loadAgentSourceBundle, loadAgentSourceMcpServers, mainWorkspaceShellCondition } from "./agent-source.js";
 
 const DEFAULT_IMAGE = process.env.OPENCLAW_IMAGE || "ghcr.io/openclaw/openclaw:latest";
 const DEFAULT_VERTEX_IMAGE = process.env.OPENCLAW_VERTEX_IMAGE || DEFAULT_IMAGE;
@@ -548,6 +548,11 @@ function buildOpenClawConfig(config: DeployConfig, gatewayToken: string): string
     };
   }
 
+  const mcpServers = loadAgentSourceMcpServers(config.agentSourceDir);
+  if (mcpServers) {
+    ocConfig.mcpServers = mcpServers;
+  }
+
   attachSecretHandlingConfig(ocConfig, config);
 
   return JSON.stringify(ocConfig);
@@ -1041,6 +1046,7 @@ Use this table to track verified peer OpenClaw instances.
       `for d in /tmp/agent-source/workspace-*; do if [ -d "$d" ]; then base="$(basename "$d")"; ${mainWorkspaceShellCondition(workspaceDir, sourceBundle)}; mkdir -p "$dest"; cp -r "$d"/* "$dest"/ 2>/dev/null || true; fi; done`,
       `if [ -d /tmp/agent-source/skills ]; then cp -r /tmp/agent-source/skills/* /home/node/.openclaw/skills/ 2>/dev/null || true; fi`,
       `if [ -f /tmp/agent-source/cron/jobs.json ]; then mkdir -p /home/node/.openclaw/cron && cp /tmp/agent-source/cron/jobs.json /home/node/.openclaw/cron/jobs.json 2>/dev/null || true; fi`,
+      `if [ -f /tmp/agent-source/exec-approvals.json ]; then cp /tmp/agent-source/exec-approvals.json /home/node/.openclaw/exec-approvals.json 2>/dev/null || true; fi`,
       runtimeOwnershipFixupCommand(),
     ].join("\n");
 
@@ -1389,6 +1395,7 @@ Use this table to track verified peer OpenClaw instances.
         `done`,
         `if [ -d /tmp/agent-source/skills ]; then mkdir -p /home/node/.openclaw/skills && cp -r /tmp/agent-source/skills/* /home/node/.openclaw/skills/ 2>/dev/null || true; fi`,
         `if [ -f /tmp/agent-source/cron/jobs.json ]; then mkdir -p /home/node/.openclaw/cron && cp /tmp/agent-source/cron/jobs.json /home/node/.openclaw/cron/jobs.json 2>/dev/null || true; fi`,
+        `if [ -f /tmp/agent-source/exec-approvals.json ]; then cp /tmp/agent-source/exec-approvals.json /home/node/.openclaw/exec-approvals.json 2>/dev/null || true; fi`,
         runtimeOwnershipFixupCommand(),
       ].join("\n");
 
@@ -1861,6 +1868,9 @@ Use this table to track verified peer OpenClaw instances.
       `if [ -f /tmp/agent-source/cron/jobs.json ]; then`,
       `  mkdir -p /home/node/.openclaw/cron`,
       `  cp -v /tmp/agent-source/cron/jobs.json /home/node/.openclaw/cron/jobs.json 2>/dev/null || true`,
+      `fi`,
+      `if [ -f /tmp/agent-source/exec-approvals.json ]; then`,
+      `  cp -v /tmp/agent-source/exec-approvals.json /home/node/.openclaw/exec-approvals.json 2>/dev/null || true`,
       `fi`,
       runtimeOwnershipFixupCommand(),
     ].join("\n");

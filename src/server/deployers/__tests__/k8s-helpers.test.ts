@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   buildOpenClawConfig,
   deriveModel,
@@ -623,5 +626,59 @@ describe("detectUnavailableProvider", () => {
     const config = makeConfig({});
     expect(detectUnavailableProvider("litellm/my-model", config)).toBe(false);
     expect(detectUnavailableProvider("custom/model", config)).toBe(false);
+  });
+});
+
+describe("MCP servers from agent source", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup failures in tests.
+      }
+    }
+  });
+
+  it("includes mcpServers when mcp.json exists in agent source dir", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-k8s-mcp-"));
+    tempDirs.push(dir);
+    writeFileSync(
+      join(dir, "mcp.json"),
+      JSON.stringify({ mcpServers: { myserver: { url: "https://mcp.example.com" } } }),
+      "utf8",
+    );
+
+    const config = makeConfig({ agentSourceDir: dir });
+    const rendered = buildOpenClawConfig(config, "gateway-token") as {
+      mcpServers?: Record<string, unknown>;
+    };
+
+    expect(rendered.mcpServers).toEqual({
+      myserver: { url: "https://mcp.example.com" },
+    });
+  });
+
+  it("omits mcpServers when no mcp.json in agent source dir", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-k8s-mcp-"));
+    tempDirs.push(dir);
+
+    const config = makeConfig({ agentSourceDir: dir });
+    const rendered = buildOpenClawConfig(config, "gateway-token") as {
+      mcpServers?: Record<string, unknown>;
+    };
+
+    expect(rendered.mcpServers).toBeUndefined();
+  });
+
+  it("omits mcpServers when agentSourceDir is not set", () => {
+    const config = makeConfig();
+    const rendered = buildOpenClawConfig(config, "gateway-token") as {
+      mcpServers?: Record<string, unknown>;
+    };
+
+    expect(rendered.mcpServers).toBeUndefined();
   });
 });
