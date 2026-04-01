@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadAgentSourceCronJobs, subagentIds, mainWorkspaceShellCondition } from "../agent-source.js";
+import { loadAgentSourceCronJobs, loadAgentSourceMcpServers, loadAgentSourceExecApprovals, subagentIds, mainWorkspaceShellCondition } from "../agent-source.js";
 import type { AgentSourceBundle } from "../agent-source.js";
 
 const tempDirs: string[] = [];
@@ -116,5 +116,104 @@ describe("mainWorkspaceShellCondition", () => {
     expect(result).not.toContain('"workspace-main"');
     // It will fall to the else branch → main dest
     expect(result).toContain(`else dest="${mainDest}"`);
+  });
+});
+
+describe("loadAgentSourceMcpServers", () => {
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup failures in tests.
+      }
+    }
+  });
+
+  it("loads mcpServers from mcp.json with wrapper format", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-agent-source-"));
+    tempDirs.push(dir);
+    writeFileSync(
+      join(dir, "mcp.json"),
+      JSON.stringify({ mcpServers: { test: { url: "https://example.com" } } }),
+      "utf8",
+    );
+
+    expect(loadAgentSourceMcpServers(dir)).toEqual({
+      test: { url: "https://example.com" },
+    });
+  });
+
+  it("loads mcpServers from mcp.json with flat format", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-agent-source-"));
+    tempDirs.push(dir);
+    writeFileSync(
+      join(dir, "mcp.json"),
+      JSON.stringify({ test: { url: "https://example.com" } }),
+      "utf8",
+    );
+
+    expect(loadAgentSourceMcpServers(dir)).toEqual({
+      test: { url: "https://example.com" },
+    });
+  });
+
+  it("returns undefined when no mcp.json exists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-agent-source-"));
+    tempDirs.push(dir);
+
+    expect(loadAgentSourceMcpServers(dir)).toBeUndefined();
+  });
+
+  it("returns undefined for invalid JSON", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-agent-source-"));
+    tempDirs.push(dir);
+    writeFileSync(join(dir, "mcp.json"), "not json", "utf8");
+
+    expect(loadAgentSourceMcpServers(dir)).toBeUndefined();
+  });
+
+  it("returns undefined for empty object", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-agent-source-"));
+    tempDirs.push(dir);
+    writeFileSync(join(dir, "mcp.json"), "{}", "utf8");
+
+    expect(loadAgentSourceMcpServers(dir)).toBeUndefined();
+  });
+
+  it("returns undefined when agentSourceDir is undefined", () => {
+    expect(loadAgentSourceMcpServers(undefined)).toBeUndefined();
+  });
+});
+
+describe("loadAgentSourceExecApprovals", () => {
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup failures in tests.
+      }
+    }
+  });
+
+  it("loads exec-approvals.json content", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-agent-source-"));
+    tempDirs.push(dir);
+    const content = JSON.stringify({ approvals: [{ command: "npm test" }] });
+    writeFileSync(join(dir, "exec-approvals.json"), content, "utf8");
+
+    expect(loadAgentSourceExecApprovals(dir)).toBe(content);
+  });
+
+  it("returns undefined when no exec-approvals.json exists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openclaw-agent-source-"));
+    tempDirs.push(dir);
+
+    expect(loadAgentSourceExecApprovals(dir)).toBeUndefined();
+  });
+
+  it("returns undefined when agentSourceDir is undefined", () => {
+    expect(loadAgentSourceExecApprovals(undefined)).toBeUndefined();
   });
 });

@@ -5,7 +5,7 @@ import { shouldUseLitellmProxy, litellmModelName, litellmRegisteredModelNames, L
 import { shouldUseOtel, OTEL_HTTP_PORT } from "./otel.js";
 import { buildSandboxConfig } from "./sandbox.js";
 import { buildSandboxToolPolicy } from "./tool-policy.js";
-import { loadAgentSourceBundle } from "./agent-source.js";
+import { loadAgentSourceBundle, loadAgentSourceMcpServers } from "./agent-source.js";
 
 export const DEFAULT_IMAGE = process.env.OPENCLAW_IMAGE || "ghcr.io/openclaw/openclaw:latest";
 export const DEFAULT_VERTEX_IMAGE = process.env.OPENCLAW_VERTEX_IMAGE || DEFAULT_IMAGE;
@@ -509,6 +509,11 @@ export function buildOpenClawConfig(config: DeployConfig, gatewayToken: string):
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => !isNaN(n));
     ocConfig.channels = { telegram: { dmPolicy: "allowlist", allowFrom } };
+  }
+
+  const mcpServers = loadAgentSourceMcpServers(config.agentSourceDir);
+  if (mcpServers) {
+    ocConfig.mcp = { servers: mcpServers };
   }
 
   attachSecretHandlingConfig(ocConfig, config);

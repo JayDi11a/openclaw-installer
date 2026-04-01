@@ -218,6 +218,7 @@ export function deploymentManifest(
   skillEntries: TreeEntry[] = [],
   agentTreeEntries: TreeEntry[] = [],
   cronJobsContent?: string,
+  execApprovalsContent?: string,
 ): k8s.V1Deployment {
   const image = defaultImage(config);
   const id = agentId(config);
@@ -304,6 +305,7 @@ ${copyLines}
 find -L /agents-tree -mindepth 1 -type d -name 'workspace-*' -exec sh -c 'base="$(basename "$1")"; ${workspaceRouting}; mkdir -p "$dest"; cp -r "$1"/* "$dest"/ 2>/dev/null || true' _ {} \\;
 cp -r /skills-src/. /home/node/.openclaw/skills/ 2>/dev/null || true
 cp /cron-src/jobs.json /home/node/.openclaw/cron/jobs.json 2>/dev/null || true
+cp /exec-approvals-src/exec-approvals.json /home/node/.openclaw/exec-approvals.json 2>/dev/null || true
 chown -R 1000:1000 /home/node/.openclaw 2>/dev/null || true
 echo "Config initialized"
 `.trim();
@@ -378,6 +380,7 @@ echo "Config initialized"
                 { name: "agent-tree-config", mountPath: "/agents-tree", readOnly: true },
                 { name: "skills-config", mountPath: "/skills-src", readOnly: true },
                 { name: "cron-config", mountPath: "/cron-src", readOnly: true },
+                { name: "exec-approvals-config", mountPath: "/exec-approvals-src", readOnly: true },
               ],
             },
           ],
@@ -543,6 +546,13 @@ echo "Config initialized"
                 ...(cronJobsContent !== undefined
                   ? { items: [{ key: "jobs.json", path: "jobs.json" }] }
                   : {}),
+              },
+            },
+            {
+              name: "exec-approvals-config",
+              configMap: {
+                name: "openclaw-exec-approvals",
+                optional: true,
               },
             },
             {
