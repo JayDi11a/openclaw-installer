@@ -3,6 +3,7 @@ import type { PodmanSecretMapping } from "../../../shared/podman-secrets.js";
 export type InferenceProvider =
   | "anthropic"
   | "openai"
+  | "openrouter"
   | "vertex-anthropic"
   | "vertex-google"
   | "custom-endpoint";
@@ -33,6 +34,7 @@ export interface DeployFormProps {
 export interface ServerDefaults {
   hasAnthropicKey: boolean;
   hasOpenaiKey: boolean;
+  hasOpenrouterKey: boolean;
   hasTelegramToken: boolean;
   telegramAllowFrom: string;
   modelEndpoint: string;
@@ -84,6 +86,12 @@ export interface DeployFormConfig {
   openaiApiKeyRefSource: SecretRefSource;
   openaiApiKeyRefProvider: string;
   openaiApiKeyRefId: string;
+  openrouterApiKeyRefSource: SecretRefSource;
+  openrouterApiKeyRefProvider: string;
+  openrouterApiKeyRefId: string;
+  modelEndpointApiKeyRefSource: SecretRefSource;
+  modelEndpointApiKeyRefProvider: string;
+  modelEndpointApiKeyRefId: string;
   telegramBotTokenRefSource: SecretRefSource;
   telegramBotTokenRefProvider: string;
   telegramBotTokenRefId: string;
@@ -110,10 +118,13 @@ export interface DeployFormConfig {
   sandboxSshKnownHostsPath: string;
   anthropicApiKey: string;
   openaiApiKey: string;
+  openrouterApiKey: string;
   anthropicModel: string;
   openaiModel: string;
+  openrouterModel: string;
   anthropicModels: string[];
   openaiModels: string[];
+  openrouterModels: string[];
   agentModel: string;
   vertexAnthropicModel: string;
   vertexAnthropicModels: string[];

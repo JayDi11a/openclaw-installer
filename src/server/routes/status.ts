@@ -15,6 +15,7 @@ import { registry } from "../deployers/registry.js";
 import { parseContainerRunArgs } from "../deployers/local.js";
 import { createLogCallback, sendStatus } from "../ws.js";
 import type { DeployResult, DeploySecretRef } from "../deployers/types.js";
+import type { PodmanSecretMapping } from "../../shared/podman-secrets.js";
 
 const router = Router();
 
@@ -86,6 +87,103 @@ function decodeSavedBase64UnlessPath(savedValue?: string, savedPath?: string): s
   return decodeSavedBase64(savedValue);
 }
 
+export function parseSavedLocalInstanceConfig(savedVars: Record<string, string>): Partial<DeployResult["config"]> {
+  return {
+    image: savedVars.OPENCLAW_IMAGE || undefined,
+    port: savedVars.OPENCLAW_PORT ? parseInt(savedVars.OPENCLAW_PORT, 10) : undefined,
+    containerRunArgs: savedVars.OPENCLAW_CONTAINER_RUN_ARGS || undefined,
+    podmanSecretMappings: decodeSavedJson<PodmanSecretMapping[]>(savedVars.PODMAN_SECRET_MAPPINGS_B64),
+    inferenceProvider: savedVars.INFERENCE_PROVIDER as
+      | "anthropic"
+      | "openai"
+      | "openrouter"
+      | "vertex-anthropic"
+      | "vertex-google"
+      | "custom-endpoint"
+      | undefined,
+    agentSecurityMode:
+      (savedVars.AGENT_SECURITY_MODE as "basic" | "secretrefs") || undefined,
+    secretsProvidersJson: decodeSavedBase64(savedVars.SECRETS_PROVIDERS_JSON_B64),
+    anthropicApiKeyRef: decodeSavedJson<DeploySecretRef>(savedVars.ANTHROPIC_API_KEY_REF_B64),
+    openaiApiKeyRef: decodeSavedJson<DeploySecretRef>(savedVars.OPENAI_API_KEY_REF_B64),
+    openrouterApiKeyRef: decodeSavedJson<DeploySecretRef>(savedVars.OPENROUTER_API_KEY_REF_B64),
+    modelEndpointApiKeyRef: decodeSavedJson<DeploySecretRef>(savedVars.MODEL_ENDPOINT_API_KEY_REF_B64),
+    telegramBotTokenRef: decodeSavedJson<DeploySecretRef>(savedVars.TELEGRAM_BOT_TOKEN_REF_B64),
+    anthropicApiKey: savedVars.ANTHROPIC_API_KEY || undefined,
+    openaiApiKey: savedVars.OPENAI_API_KEY || undefined,
+    openrouterApiKey: savedVars.OPENROUTER_API_KEY || undefined,
+    anthropicModel: savedVars.ANTHROPIC_MODEL || undefined,
+    openaiModel: savedVars.OPENAI_MODEL || undefined,
+    openrouterModel: savedVars.OPENROUTER_MODEL || undefined,
+    modelFallbacks: decodeSavedJson(savedVars.MODEL_FALLBACKS_B64),
+    openaiCompatibleEndpointsEnabled:
+      savedVars.OPENAI_COMPATIBLE_ENDPOINTS_ENABLED === "false" ? false : undefined,
+    modelEndpoint: savedVars.MODEL_ENDPOINT || undefined,
+    modelEndpointApiKey: savedVars.MODEL_ENDPOINT_API_KEY || undefined,
+    modelEndpointModel: savedVars.MODEL_ENDPOINT_MODEL || undefined,
+    modelEndpointModelLabel: savedVars.MODEL_ENDPOINT_MODEL_LABEL || undefined,
+    modelEndpointModels: decodeSavedJson(savedVars.MODEL_ENDPOINT_MODELS_B64),
+    openrouterModels: decodeSavedJson(savedVars.OPENROUTER_MODELS_B64),
+    agentModel: savedVars.AGENT_MODEL || undefined,
+    agentSourceDir: savedVars.AGENT_SOURCE_DIR || undefined,
+    vertexEnabled: savedVars.VERTEX_ENABLED === "true" || undefined,
+    vertexProvider: (savedVars.VERTEX_PROVIDER as "google" | "anthropic") || undefined,
+    // SA JSON is on the volume — set a sentinel so buildRunArgs sets GOOGLE_APPLICATION_CREDENTIALS
+    gcpServiceAccountJson: savedVars.GOOGLE_APPLICATION_CREDENTIALS ? "(on-volume)" : undefined,
+    googleCloudProject: savedVars.GOOGLE_CLOUD_PROJECT || undefined,
+    googleCloudLocation: savedVars.GOOGLE_CLOUD_LOCATION || undefined,
+    litellmProxy: savedVars.LITELLM_PROXY === "true" || undefined,
+    otelEnabled: savedVars.OTEL_ENABLED === "true" || undefined,
+    otelJaeger: savedVars.OTEL_JAEGER === "true" || undefined,
+    otelEndpoint: savedVars.OTEL_ENDPOINT || undefined,
+    otelExperimentId: savedVars.OTEL_EXPERIMENT_ID || undefined,
+    otelImage: savedVars.OTEL_IMAGE || undefined,
+    telegramBotToken: savedVars.TELEGRAM_BOT_TOKEN || undefined,
+    telegramAllowFrom: savedVars.TELEGRAM_ALLOW_FROM || undefined,
+    sandboxEnabled: savedVars.SANDBOX_ENABLED === "true" || undefined,
+    sandboxBackend: (savedVars.SANDBOX_BACKEND as "ssh") || undefined,
+    sandboxMode:
+      (savedVars.SANDBOX_MODE as "off" | "non-main" | "all") || undefined,
+    sandboxScope:
+      (savedVars.SANDBOX_SCOPE as "session" | "agent" | "shared") || undefined,
+    sandboxToolPolicyEnabled:
+      savedVars.SANDBOX_TOOL_POLICY_ENABLED === "true" || undefined,
+    sandboxToolAllowFiles:
+      savedVars.SANDBOX_TOOL_ALLOW_FILES === "false" ? false : undefined,
+    sandboxToolAllowSessions:
+      savedVars.SANDBOX_TOOL_ALLOW_SESSIONS === "false" ? false : undefined,
+    sandboxToolAllowMemory:
+      savedVars.SANDBOX_TOOL_ALLOW_MEMORY === "false" ? false : undefined,
+    sandboxToolAllowRuntime:
+      savedVars.SANDBOX_TOOL_ALLOW_RUNTIME === "true" || undefined,
+    sandboxToolAllowBrowser:
+      savedVars.SANDBOX_TOOL_ALLOW_BROWSER === "true" || undefined,
+    sandboxToolAllowAutomation:
+      savedVars.SANDBOX_TOOL_ALLOW_AUTOMATION === "true" || undefined,
+    sandboxToolAllowMessaging:
+      savedVars.SANDBOX_TOOL_ALLOW_MESSAGING === "true" || undefined,
+    sandboxWorkspaceAccess:
+      (savedVars.SANDBOX_WORKSPACE_ACCESS as "none" | "ro" | "rw") || undefined,
+    sandboxSshTarget: savedVars.SANDBOX_SSH_TARGET || undefined,
+    sandboxSshWorkspaceRoot: savedVars.SANDBOX_SSH_WORKSPACE_ROOT || undefined,
+    sandboxSshIdentityPath: savedVars.SANDBOX_SSH_IDENTITY_PATH || undefined,
+    sandboxSshCertificatePath: savedVars.SANDBOX_SSH_CERTIFICATE_PATH || undefined,
+    sandboxSshKnownHostsPath: savedVars.SANDBOX_SSH_KNOWN_HOSTS_PATH || undefined,
+    sandboxSshStrictHostKeyChecking:
+      savedVars.SANDBOX_SSH_STRICT_HOST_KEY_CHECKING === "false" ? false : undefined,
+    sandboxSshUpdateHostKeys:
+      savedVars.SANDBOX_SSH_UPDATE_HOST_KEYS === "false" ? false : undefined,
+    sandboxSshCertificate: decodeSavedBase64UnlessPath(
+      savedVars.SANDBOX_SSH_CERTIFICATE_B64,
+      savedVars.SANDBOX_SSH_CERTIFICATE_PATH,
+    ),
+    sandboxSshKnownHosts: decodeSavedBase64UnlessPath(
+      savedVars.SANDBOX_SSH_KNOWN_HOSTS_B64,
+      savedVars.SANDBOX_SSH_KNOWN_HOSTS_PATH,
+    ),
+  };
+}
+
 // List all instances: running containers + stopped volumes (no container due to --rm) + K8s
 router.get("/", async (req, res) => {
   const instances: DeployResult[] = [];
@@ -121,75 +219,7 @@ router.get("/", async (req, res) => {
               prefix,
               agentName,
               agentDisplayName: displayName.charAt(0).toUpperCase() + displayName.slice(1),
-              image: savedVars.OPENCLAW_IMAGE || undefined,
-              port: savedVars.OPENCLAW_PORT ? parseInt(savedVars.OPENCLAW_PORT, 10) : undefined,
-              inferenceProvider: savedVars.INFERENCE_PROVIDER as
-                | "anthropic"
-                | "openai"
-                | "vertex-anthropic"
-                | "vertex-google"
-                | "custom-endpoint"
-                | undefined,
-              agentSecurityMode:
-                (savedVars.AGENT_SECURITY_MODE as "basic" | "secretrefs") || undefined,
-              secretsProvidersJson: decodeSavedBase64(savedVars.SECRETS_PROVIDERS_JSON_B64),
-              anthropicApiKeyRef: decodeSavedJson<DeploySecretRef>(savedVars.ANTHROPIC_API_KEY_REF_B64),
-              openaiApiKeyRef: decodeSavedJson<DeploySecretRef>(savedVars.OPENAI_API_KEY_REF_B64),
-              telegramBotTokenRef: decodeSavedJson<DeploySecretRef>(savedVars.TELEGRAM_BOT_TOKEN_REF_B64),
-              anthropicApiKey: savedVars.ANTHROPIC_API_KEY || undefined,
-              openaiApiKey: savedVars.OPENAI_API_KEY || undefined,
-              anthropicModel: savedVars.ANTHROPIC_MODEL || undefined,
-              openaiModel: savedVars.OPENAI_MODEL || undefined,
-              modelFallbacks: decodeSavedJson(savedVars.MODEL_FALLBACKS_B64),
-              openaiCompatibleEndpointsEnabled:
-                savedVars.OPENAI_COMPATIBLE_ENDPOINTS_ENABLED === "false" ? false : undefined,
-              modelEndpointApiKey: savedVars.MODEL_ENDPOINT_API_KEY || undefined,
-              modelEndpointModel: savedVars.MODEL_ENDPOINT_MODEL || undefined,
-              modelEndpointModelLabel: savedVars.MODEL_ENDPOINT_MODEL_LABEL || undefined,
-              modelEndpointModels: decodeSavedJson(savedVars.MODEL_ENDPOINT_MODELS_B64),
-              telegramBotToken: savedVars.TELEGRAM_BOT_TOKEN || undefined,
-              telegramAllowFrom: savedVars.TELEGRAM_ALLOW_FROM || undefined,
-              sandboxEnabled: savedVars.SANDBOX_ENABLED === "true" || undefined,
-              sandboxBackend: (savedVars.SANDBOX_BACKEND as "ssh") || undefined,
-              sandboxMode:
-                (savedVars.SANDBOX_MODE as "off" | "non-main" | "all") || undefined,
-              sandboxScope:
-                (savedVars.SANDBOX_SCOPE as "session" | "agent" | "shared") || undefined,
-              sandboxToolPolicyEnabled:
-                savedVars.SANDBOX_TOOL_POLICY_ENABLED === "true" || undefined,
-              sandboxToolAllowFiles:
-                savedVars.SANDBOX_TOOL_ALLOW_FILES === "false" ? false : undefined,
-              sandboxToolAllowSessions:
-                savedVars.SANDBOX_TOOL_ALLOW_SESSIONS === "false" ? false : undefined,
-              sandboxToolAllowMemory:
-                savedVars.SANDBOX_TOOL_ALLOW_MEMORY === "false" ? false : undefined,
-              sandboxToolAllowRuntime:
-                savedVars.SANDBOX_TOOL_ALLOW_RUNTIME === "true" || undefined,
-              sandboxToolAllowBrowser:
-                savedVars.SANDBOX_TOOL_ALLOW_BROWSER === "true" || undefined,
-              sandboxToolAllowAutomation:
-                savedVars.SANDBOX_TOOL_ALLOW_AUTOMATION === "true" || undefined,
-              sandboxToolAllowMessaging:
-                savedVars.SANDBOX_TOOL_ALLOW_MESSAGING === "true" || undefined,
-              sandboxWorkspaceAccess:
-                (savedVars.SANDBOX_WORKSPACE_ACCESS as "none" | "ro" | "rw") || undefined,
-              sandboxSshTarget: savedVars.SANDBOX_SSH_TARGET || undefined,
-              sandboxSshWorkspaceRoot: savedVars.SANDBOX_SSH_WORKSPACE_ROOT || undefined,
-              sandboxSshIdentityPath: savedVars.SANDBOX_SSH_IDENTITY_PATH || undefined,
-              sandboxSshCertificatePath: savedVars.SANDBOX_SSH_CERTIFICATE_PATH || undefined,
-              sandboxSshKnownHostsPath: savedVars.SANDBOX_SSH_KNOWN_HOSTS_PATH || undefined,
-              sandboxSshStrictHostKeyChecking:
-                savedVars.SANDBOX_SSH_STRICT_HOST_KEY_CHECKING === "false" ? false : undefined,
-              sandboxSshUpdateHostKeys:
-                savedVars.SANDBOX_SSH_UPDATE_HOST_KEYS === "false" ? false : undefined,
-              sandboxSshCertificate: decodeSavedBase64UnlessPath(
-                savedVars.SANDBOX_SSH_CERTIFICATE_B64,
-                savedVars.SANDBOX_SSH_CERTIFICATE_PATH,
-              ),
-              sandboxSshKnownHosts: decodeSavedBase64UnlessPath(
-                savedVars.SANDBOX_SSH_KNOWN_HOSTS_B64,
-                savedVars.SANDBOX_SSH_KNOWN_HOSTS_PATH,
-              ),
+              ...parseSavedLocalInstanceConfig(savedVars),
             },
             startedAt: "",
             containerId: vol.containerName,
@@ -571,6 +601,8 @@ router.get("/:id/command", async (req, res) => {
     const pod = `${containerName}-pod`;
     const savedVars = await readSavedConfig(containerName);
     const savedRunArgs = parseContainerRunArgs(savedVars.OPENCLAW_CONTAINER_RUN_ARGS);
+    const savedPodmanSecretMappings =
+      decodeSavedJson<PodmanSecretMapping[]>(savedVars.PODMAN_SECRET_MAPPINGS_B64) || [];
 
     // Detect if LiteLLM sidecar is running
     let hasLitellm = false;
@@ -637,9 +669,13 @@ router.get("/:id/command", async (req, res) => {
     }
 
     const envList: string[] = config.Env || [];
+    const savedSecretNames = new Set(savedPodmanSecretMappings.map((entry) => entry.secretName));
+    const savedSecretTargets = new Set(savedPodmanSecretMappings.map((entry) => entry.targetEnv));
     const redactedEnvKeys = new Set([
       "ANTHROPIC_API_KEY",
       "OPENAI_API_KEY",
+      "OPENROUTER_API_KEY",
+      "MODEL_ENDPOINT_API_KEY",
       "TELEGRAM_BOT_TOKEN",
       "SSH_IDENTITY",
       "SSH_CERTIFICATE",
@@ -648,11 +684,16 @@ router.get("/:id/command", async (req, res) => {
     for (const e of envList) {
       if (e.startsWith("PATH=") || e.startsWith("HOSTNAME=") || e.startsWith("container=")) continue;
       const [key] = e.split("=", 1);
+      if (savedSecretNames.has(key) || savedSecretTargets.has(key)) continue;
       if (redactedEnvKeys.has(key) || key.endsWith("_TOKEN") || key.endsWith("_API_KEY")) {
         parts.push("-e", `${key}=***`);
       } else {
         parts.push("-e", `"${e}"`);
       }
+    }
+
+    for (const mapping of savedPodmanSecretMappings) {
+      parts.push("--secret", `${mapping.secretName},type=env,target=${mapping.targetEnv}`);
     }
 
     const mounts = info.Mounts || [];
@@ -845,91 +886,7 @@ async function findInstance(name: string): Promise<DeployResult | null> {
           agentName,
           agentDisplayName: savedVars.OPENCLAW_DISPLAY_NAME || agentName,
           containerRuntime: runtime,
-          image: savedVars.OPENCLAW_IMAGE || undefined,
-          port: savedVars.OPENCLAW_PORT ? parseInt(savedVars.OPENCLAW_PORT, 10) : undefined,
-          containerRunArgs: savedVars.OPENCLAW_CONTAINER_RUN_ARGS || undefined,
-          inferenceProvider: savedVars.INFERENCE_PROVIDER as
-            | "anthropic"
-            | "openai"
-            | "vertex-anthropic"
-            | "vertex-google"
-            | "custom-endpoint"
-            | undefined,
-          agentSecurityMode:
-            (savedVars.AGENT_SECURITY_MODE as "basic" | "secretrefs") || undefined,
-          secretsProvidersJson: decodeSavedBase64(savedVars.SECRETS_PROVIDERS_JSON_B64),
-          anthropicApiKeyRef: decodeSavedJson<DeploySecretRef>(savedVars.ANTHROPIC_API_KEY_REF_B64),
-          openaiApiKeyRef: decodeSavedJson<DeploySecretRef>(savedVars.OPENAI_API_KEY_REF_B64),
-          telegramBotTokenRef: decodeSavedJson<DeploySecretRef>(savedVars.TELEGRAM_BOT_TOKEN_REF_B64),
-          anthropicApiKey: savedVars.ANTHROPIC_API_KEY || undefined,
-          openaiApiKey: savedVars.OPENAI_API_KEY || undefined,
-          anthropicModel: savedVars.ANTHROPIC_MODEL || undefined,
-          openaiModel: savedVars.OPENAI_MODEL || undefined,
-          modelFallbacks: decodeSavedJson(savedVars.MODEL_FALLBACKS_B64),
-          openaiCompatibleEndpointsEnabled:
-            savedVars.OPENAI_COMPATIBLE_ENDPOINTS_ENABLED === "false" ? false : undefined,
-          modelEndpointApiKey: savedVars.MODEL_ENDPOINT_API_KEY || undefined,
-          modelEndpointModel: savedVars.MODEL_ENDPOINT_MODEL || undefined,
-          modelEndpointModelLabel: savedVars.MODEL_ENDPOINT_MODEL_LABEL || undefined,
-          modelEndpointModels: decodeSavedJson(savedVars.MODEL_ENDPOINT_MODELS_B64),
-          agentModel: savedVars.AGENT_MODEL || undefined,
-          modelEndpoint: savedVars.MODEL_ENDPOINT || undefined,
-          agentSourceDir: savedVars.AGENT_SOURCE_DIR || undefined,
-          vertexEnabled: savedVars.VERTEX_ENABLED === "true" || undefined,
-          vertexProvider: (savedVars.VERTEX_PROVIDER as "google" | "anthropic") || undefined,
-          googleCloudProject: savedVars.GOOGLE_CLOUD_PROJECT || undefined,
-          googleCloudLocation: savedVars.GOOGLE_CLOUD_LOCATION || undefined,
-          // SA JSON is on the volume — set a sentinel so buildRunArgs sets GOOGLE_APPLICATION_CREDENTIALS
-          gcpServiceAccountJson: savedVars.GOOGLE_APPLICATION_CREDENTIALS ? "(on-volume)" : undefined,
-          litellmProxy: savedVars.LITELLM_PROXY === "true" || undefined,
-          otelEnabled: savedVars.OTEL_ENABLED === "true" || undefined,
-          otelJaeger: savedVars.OTEL_JAEGER === "true" || undefined,
-          otelEndpoint: savedVars.OTEL_ENDPOINT || undefined,
-          otelExperimentId: savedVars.OTEL_EXPERIMENT_ID || undefined,
-          otelImage: savedVars.OTEL_IMAGE || undefined,
-          telegramBotToken: savedVars.TELEGRAM_BOT_TOKEN || undefined,
-          telegramAllowFrom: savedVars.TELEGRAM_ALLOW_FROM || undefined,
-          sandboxEnabled: savedVars.SANDBOX_ENABLED === "true" || undefined,
-          sandboxBackend: (savedVars.SANDBOX_BACKEND as "ssh") || undefined,
-          sandboxMode:
-            (savedVars.SANDBOX_MODE as "off" | "non-main" | "all") || undefined,
-          sandboxScope:
-            (savedVars.SANDBOX_SCOPE as "session" | "agent" | "shared") || undefined,
-          sandboxToolPolicyEnabled:
-            savedVars.SANDBOX_TOOL_POLICY_ENABLED === "true" || undefined,
-          sandboxToolAllowFiles:
-            savedVars.SANDBOX_TOOL_ALLOW_FILES === "false" ? false : undefined,
-          sandboxToolAllowSessions:
-            savedVars.SANDBOX_TOOL_ALLOW_SESSIONS === "false" ? false : undefined,
-          sandboxToolAllowMemory:
-            savedVars.SANDBOX_TOOL_ALLOW_MEMORY === "false" ? false : undefined,
-          sandboxToolAllowRuntime:
-            savedVars.SANDBOX_TOOL_ALLOW_RUNTIME === "true" || undefined,
-          sandboxToolAllowBrowser:
-            savedVars.SANDBOX_TOOL_ALLOW_BROWSER === "true" || undefined,
-          sandboxToolAllowAutomation:
-            savedVars.SANDBOX_TOOL_ALLOW_AUTOMATION === "true" || undefined,
-          sandboxToolAllowMessaging:
-            savedVars.SANDBOX_TOOL_ALLOW_MESSAGING === "true" || undefined,
-          sandboxWorkspaceAccess:
-            (savedVars.SANDBOX_WORKSPACE_ACCESS as "none" | "ro" | "rw") || undefined,
-          sandboxSshTarget: savedVars.SANDBOX_SSH_TARGET || undefined,
-          sandboxSshWorkspaceRoot: savedVars.SANDBOX_SSH_WORKSPACE_ROOT || undefined,
-          sandboxSshIdentityPath: savedVars.SANDBOX_SSH_IDENTITY_PATH || undefined,
-          sandboxSshCertificatePath: savedVars.SANDBOX_SSH_CERTIFICATE_PATH || undefined,
-          sandboxSshKnownHostsPath: savedVars.SANDBOX_SSH_KNOWN_HOSTS_PATH || undefined,
-          sandboxSshStrictHostKeyChecking:
-            savedVars.SANDBOX_SSH_STRICT_HOST_KEY_CHECKING === "false" ? false : undefined,
-          sandboxSshUpdateHostKeys:
-            savedVars.SANDBOX_SSH_UPDATE_HOST_KEYS === "false" ? false : undefined,
-          sandboxSshCertificate: decodeSavedBase64UnlessPath(
-            savedVars.SANDBOX_SSH_CERTIFICATE_B64,
-            savedVars.SANDBOX_SSH_CERTIFICATE_PATH,
-          ),
-          sandboxSshKnownHosts: decodeSavedBase64UnlessPath(
-            savedVars.SANDBOX_SSH_KNOWN_HOSTS_B64,
-            savedVars.SANDBOX_SSH_KNOWN_HOSTS_PATH,
-          ),
+          ...parseSavedLocalInstanceConfig(savedVars),
         },
         startedAt: "",
         containerId: name,

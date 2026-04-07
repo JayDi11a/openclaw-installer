@@ -27,6 +27,40 @@ describe("applyServerEnvFallbacks", () => {
     expect(config.openaiApiKey).toBe("sk-openai-env");
   });
 
+  it("hydrates OpenRouter credentials from server env", () => {
+    const config = makeConfig({
+      inferenceProvider: "anthropic",
+    });
+
+    applyServerEnvFallbacks(config, {
+      OPENROUTER_API_KEY: "sk-or-env",
+    });
+
+    expect(config.openrouterApiKey).toBe("sk-or-env");
+  });
+
+  it("hydrates provider credentials from server env even when Podman secret defaults are present", () => {
+    const config = makeConfig({
+      inferenceProvider: "anthropic",
+      podmanSecretMappings: [
+        { secretName: "anthropic_api_key", targetEnv: "ANTHROPIC_API_KEY" },
+        { secretName: "openai_api_key", targetEnv: "OPENAI_API_KEY" },
+        { secretName: "openrouter_api_key", targetEnv: "OPENROUTER_API_KEY" },
+        { secretName: "model_endpoint_api_key", targetEnv: "MODEL_ENDPOINT_API_KEY" },
+      ],
+    });
+
+    applyServerEnvFallbacks(config, {
+      ANTHROPIC_API_KEY: "sk-ant-env",
+      OPENAI_API_KEY: "sk-openai-env",
+      OPENROUTER_API_KEY: "sk-or-env",
+    });
+
+    expect(config.anthropicApiKey).toBe("sk-ant-env");
+    expect(config.openaiApiKey).toBe("sk-openai-env");
+    expect(config.openrouterApiKey).toBe("sk-or-env");
+  });
+
   it("hydrates endpoint token independently from the OpenAI API key", () => {
     const config = makeConfig({
       inferenceProvider: "anthropic",

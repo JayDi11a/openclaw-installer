@@ -185,6 +185,8 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
           if (d.modelEndpoint) {
             setConfig((prev) => ({ ...prev, modelEndpoint: d.modelEndpoint }));
             setInferenceProvider("custom-endpoint");
+          } else if (d.hasOpenrouterKey && !d.hasOpenaiKey && !d.hasAnthropicKey) {
+            setInferenceProvider("openrouter");
           } else if (d.hasOpenaiKey && !d.hasAnthropicKey) {
             setInferenceProvider("openai");
           }
@@ -595,6 +597,8 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
         suggestedNamespace,
         anthropicApiKeyRef,
         openaiApiKeyRef,
+        openrouterApiKeyRef,
+        modelEndpointApiKeyRef,
         telegramBotTokenRef,
       });
 
@@ -623,6 +627,8 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
       suggestedNamespace,
       anthropicApiKeyRef,
       openaiApiKeyRef,
+      openrouterApiKeyRef,
+      modelEndpointApiKeyRef,
       telegramBotTokenRef,
     });
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -655,6 +661,16 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
     config.openaiApiKeyRefProvider,
     config.openaiApiKeyRefId,
   );
+  const openrouterApiKeyRef = buildSecretRef(
+    config.openrouterApiKeyRefSource,
+    config.openrouterApiKeyRefProvider,
+    config.openrouterApiKeyRefId,
+  );
+  const modelEndpointApiKeyRef = buildSecretRef(
+    config.modelEndpointApiKeyRefSource,
+    config.modelEndpointApiKeyRefProvider,
+    config.modelEndpointApiKeyRefId,
+  );
   const telegramBotTokenRef = buildSecretRef(
     config.telegramBotTokenRefSource,
     config.telegramBotTokenRefProvider,
@@ -680,7 +696,15 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
       ? { source: "env", provider: "default", id: "OPENAI_API_KEY" as const }
       : undefined
     : undefined;
-  const inferredModelEndpointApiKeyRef = (
+  const inferredOpenrouterApiKeyRef = !openrouterApiKeyRef
+    ? (
+      podmanSecretMappingsParse.mappings.some((mapping) => mapping.targetEnv === "OPENROUTER_API_KEY")
+        || Boolean(config.openrouterApiKey.trim())
+    )
+      ? { source: "env", provider: "default", id: "OPENROUTER_API_KEY" as const }
+      : undefined
+    : undefined;
+  const inferredModelEndpointApiKeyRef = !modelEndpointApiKeyRef && (
     config.modelEndpoint.trim() && !config.modelEndpointApiKey.trim()
       ? undefined
       : (
@@ -724,6 +748,12 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
   }
   if (config.openaiApiKeyRefId.trim() && !openaiApiKeyRef) {
     validationErrors.push("OpenAI SecretRef requires source, provider, and id.");
+  }
+  if (config.openrouterApiKeyRefId.trim() && !openrouterApiKeyRef) {
+    validationErrors.push("OpenRouter SecretRef requires source, provider, and id.");
+  }
+  if (config.modelEndpointApiKeyRefId.trim() && !modelEndpointApiKeyRef) {
+    validationErrors.push("OpenAI-compatible endpoint SecretRef requires source, provider, and id.");
   }
   if (config.telegramBotTokenRefId.trim() && !telegramBotTokenRef) {
     validationErrors.push("Telegram SecretRef requires source, provider, and id.");
@@ -1143,6 +1173,9 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
                   One mapping per line in the form <code>podman_secret_name=ENV_VAR_NAME</code>.
                   The installer appends the matching <code>--secret</code> flags automatically. Create the Podman secrets separately with <code>podman secret create</code>.
                 </div>
+                <div className="hint" style={{ marginTop: "0.35rem" }}>
+                  Known provider mappings are prefilled for convenience. If a Podman secret does not exist locally, that mapping is skipped.
+                </div>
               </div>
             )}
           </>
@@ -1299,10 +1332,12 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
           mode={mode}
           effectiveAnthropicApiKeyRef={anthropicApiKeyRef || inferredAnthropicApiKeyRef}
           effectiveOpenaiApiKeyRef={openaiApiKeyRef || inferredOpenaiApiKeyRef}
-          effectiveModelEndpointApiKeyRef={inferredModelEndpointApiKeyRef}
+          effectiveOpenrouterApiKeyRef={openrouterApiKeyRef || inferredOpenrouterApiKeyRef}
+          effectiveModelEndpointApiKeyRef={modelEndpointApiKeyRef || inferredModelEndpointApiKeyRef}
           anthropicApiKeyRefIsInferred={!anthropicApiKeyRef && Boolean(inferredAnthropicApiKeyRef)}
           openaiApiKeyRefIsInferred={!openaiApiKeyRef && Boolean(inferredOpenaiApiKeyRef)}
-          modelEndpointApiKeyRefIsInferred={Boolean(inferredModelEndpointApiKeyRef)}
+          openrouterApiKeyRefIsInferred={!openrouterApiKeyRef && Boolean(inferredOpenrouterApiKeyRef)}
+          modelEndpointApiKeyRefIsInferred={!modelEndpointApiKeyRef && Boolean(inferredModelEndpointApiKeyRef)}
         />
 
         <ExternalSecretProvidersSection

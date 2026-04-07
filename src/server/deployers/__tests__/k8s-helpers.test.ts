@@ -74,6 +74,18 @@ describe("model config generation", () => {
     expect(deriveModel(config)).toBe("anthropic/claude-sonnet-4-6");
   });
 
+  it("normalizes OpenRouter model ids whether or not they already include the provider prefix", () => {
+    const config = makeConfig({
+      inferenceProvider: "openrouter",
+      openrouterApiKey: "test-key",
+      openrouterModel: "google/gemma-4-26b-a4b-it",
+    });
+
+    expect(normalizeModelRef(config, "google/gemma-4-26b-a4b-it")).toBe("openrouter/google/gemma-4-26b-a4b-it");
+    expect(normalizeModelRef(config, "openrouter/google/gemma-4-26b-a4b-it")).toBe("openrouter/google/gemma-4-26b-a4b-it");
+    expect(deriveModel(config)).toBe("openrouter/google/gemma-4-26b-a4b-it");
+  });
+
   it("publishes only the configured default model in the agent catalog", () => {
     const config = makeConfig({
       anthropicApiKey: "test-key",
@@ -100,6 +112,8 @@ describe("model config generation", () => {
       inferenceProvider: "custom-endpoint",
       anthropicApiKey: "anthropic-key",
       openaiApiKey: "openai-key",
+      openrouterApiKey: "openrouter-key",
+      openrouterModel: "openrouter/auto",
       modelEndpoint: "https://example.com/v1",
       modelEndpointModel: "mistral-small-24b-w8a8",
       modelEndpointModelLabel: "Mistral Small 24B",
@@ -116,6 +130,7 @@ describe("model config generation", () => {
     expect(rendered.agents?.defaults?.models).toMatchObject({
       "anthropic/claude-sonnet-4-6": { alias: "claude-sonnet-4-6" },
       "openai/gpt-5.4": { alias: "gpt-5.4" },
+      "openrouter/auto": { alias: "openrouter/auto" },
       "endpoint/mistral-small-24b-w8a8": { alias: "Mistral Small 24B" },
     });
   });
@@ -456,6 +471,8 @@ describe("model config generation", () => {
       agentModel: "claude-sonnet-4-6",
       anthropicModel: "claude-opus-4-6",
       openaiModel: "gpt-5",
+      openrouterModel: "auto",
+      openrouterModels: ["google/gemma-4-26b-a4b-it", "openrouter/anthropic/claude-sonnet-4-6"],
       modelEndpoint: "http://localhost:8000/v1",
       modelEndpointModel: "llama-4-scout-17b-16e-w4a16",
       modelEndpointModels: [
@@ -476,8 +493,47 @@ describe("model config generation", () => {
       "anthropic/claude-sonnet-4-6": { alias: "claude-sonnet-4-6" },
       "anthropic/claude-opus-4-6": { alias: "claude-opus-4-6" },
       "openai/gpt-5": { alias: "gpt-5" },
+      "openrouter/auto": { alias: "auto" },
+      "openrouter/google/gemma-4-26b-a4b-it": { alias: "google/gemma-4-26b-a4b-it" },
+      "openrouter/anthropic/claude-sonnet-4-6": { alias: "openrouter/anthropic/claude-sonnet-4-6" },
       "endpoint/llama-4-scout-17b-16e-w4a16": { alias: "Llama 4 Scout 17B" },
       "endpoint/llama-4-maverick-17b": { alias: "Llama 4 Maverick 17B" },
+    });
+  });
+
+  it("configures OpenRouter provider auth and published models", () => {
+    const config = makeConfig({
+      inferenceProvider: "openrouter",
+      openrouterApiKey: "sk-or-test",
+      openrouterModel: "openrouter/auto",
+      openrouterModels: ["openrouter/anthropic/claude-sonnet-4-6"],
+    });
+
+    const rendered = buildOpenClawConfig(config, "gateway-token") as {
+      models?: {
+        providers?: Record<string, {
+          baseUrl?: string;
+          api?: string;
+          apiKey?: unknown;
+          models?: Array<{ id?: string; name?: string }>;
+        }>;
+      };
+      secrets?: { providers?: Record<string, unknown> };
+    };
+
+    expect(rendered.models?.providers?.openrouter?.baseUrl).toBe("https://openrouter.ai/api/v1");
+    expect(rendered.models?.providers?.openrouter?.api).toBe("openai-completions");
+    expect(rendered.models?.providers?.openrouter?.apiKey).toEqual({
+      source: "env",
+      provider: "default",
+      id: "OPENROUTER_API_KEY",
+    });
+    expect(rendered.models?.providers?.openrouter?.models).toEqual([
+      { id: "auto", name: "auto" },
+      { id: "anthropic/claude-sonnet-4-6", name: "anthropic/claude-sonnet-4-6" },
+    ]);
+    expect(rendered.secrets?.providers).toMatchObject({
+      default: { source: "env" },
     });
   });
 

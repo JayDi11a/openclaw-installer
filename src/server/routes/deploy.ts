@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import type { DeployConfig, DeploySecretRef } from "../deployers/types.js";
 import { validateAgentName } from "../../shared/validate-agent-name.js";
-import { hasPodmanSecretTarget, normalizePodmanSecretMappings } from "../../shared/podman-secrets.js";
+import { normalizePodmanSecretMappings } from "../../shared/podman-secrets.js";
 import { detectGcpDefaults, defaultVertexLocation } from "../services/gcp.js";
 import { normalizeModelEndpointBaseUrl } from "../services/model-endpoint.js";
 import { namespaceName } from "../deployers/k8s-helpers.js";
@@ -74,7 +74,6 @@ export function applyServerEnvFallbacks(config: DeployConfig, env: NodeJS.Proces
   if (
     !config.anthropicApiKey
     && !config.anthropicApiKeyRef
-    && !hasPodmanSecretTarget(config.podmanSecretMappings, "ANTHROPIC_API_KEY")
     && env.ANTHROPIC_API_KEY
   ) {
     config.anthropicApiKey = env.ANTHROPIC_API_KEY;
@@ -82,10 +81,16 @@ export function applyServerEnvFallbacks(config: DeployConfig, env: NodeJS.Proces
   if (
     !config.openaiApiKey
     && !config.openaiApiKeyRef
-    && !hasPodmanSecretTarget(config.podmanSecretMappings, "OPENAI_API_KEY")
     && env.OPENAI_API_KEY
   ) {
     config.openaiApiKey = env.OPENAI_API_KEY;
+  }
+  if (
+    !config.openrouterApiKey
+    && !config.openrouterApiKeyRef
+    && env.OPENROUTER_API_KEY
+  ) {
+    config.openrouterApiKey = env.OPENROUTER_API_KEY;
   }
   if (!config.modelEndpoint && config.inferenceProvider === "custom-endpoint" && env.MODEL_ENDPOINT) {
     config.modelEndpoint = env.MODEL_ENDPOINT;
@@ -93,7 +98,7 @@ export function applyServerEnvFallbacks(config: DeployConfig, env: NodeJS.Proces
   if (
     config.modelEndpoint
     && !config.modelEndpointApiKey
-    && !hasPodmanSecretTarget(config.podmanSecretMappings, "MODEL_ENDPOINT_API_KEY")
+    && !config.modelEndpointApiKeyRef
     && env.MODEL_ENDPOINT_API_KEY
   ) {
     config.modelEndpointApiKey = env.MODEL_ENDPOINT_API_KEY;
@@ -130,8 +135,11 @@ router.post("/", async (req, res) => {
   config.telegramAllowFrom = trimOptional(config.telegramAllowFrom);
   config.anthropicModel = trimOptional(config.anthropicModel);
   config.openaiModel = trimOptional(config.openaiModel);
+  config.openrouterApiKey = trimOptional(config.openrouterApiKey);
+  config.openrouterModel = trimOptional(config.openrouterModel);
   config.anthropicModels = normalizeStringArray(config.anthropicModels);
   config.openaiModels = normalizeStringArray(config.openaiModels);
+  config.openrouterModels = normalizeStringArray(config.openrouterModels);
   config.namespace = trimOptional(config.namespace);
   config.a2aRealm = trimOptional(config.a2aRealm);
   config.a2aKeycloakNamespace = trimOptional(config.a2aKeycloakNamespace);
@@ -157,6 +165,8 @@ router.post("/", async (req, res) => {
   try {
     config.anthropicApiKeyRef = normalizeSecretRef(config.anthropicApiKeyRef);
     config.openaiApiKeyRef = normalizeSecretRef(config.openaiApiKeyRef);
+    config.openrouterApiKeyRef = normalizeSecretRef(config.openrouterApiKeyRef);
+    config.modelEndpointApiKeyRef = normalizeSecretRef(config.modelEndpointApiKeyRef);
     config.telegramBotTokenRef = normalizeSecretRef(config.telegramBotTokenRef);
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -223,6 +233,8 @@ router.post("/", async (req, res) => {
       config.inferenceProvider = config.vertexProvider === "google" ? "vertex-google" : "vertex-anthropic";
     } else if (config.modelEndpoint) {
       config.inferenceProvider = "custom-endpoint";
+    } else if (config.openrouterApiKey || config.openrouterApiKeyRef) {
+      config.inferenceProvider = "openrouter";
     } else if (config.anthropicApiKey) {
       config.inferenceProvider = "anthropic";
     } else if (config.openaiApiKey) {

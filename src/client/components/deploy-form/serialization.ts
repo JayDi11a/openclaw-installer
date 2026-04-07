@@ -5,6 +5,7 @@ import {
   trimToUndefined,
 } from "./utils.js";
 import {
+  DEFAULT_PROVIDER_PODMAN_SECRET_MAPPINGS_TEXT,
   formatPodmanSecretMappingsText,
   normalizePodmanSecretMappings,
   parsePodmanSecretMappingsText,
@@ -23,7 +24,7 @@ export function createInitialDeployFormConfig(): DeployFormConfig {
     agentDisplayName: "",
     image: "",
     containerRunArgs: "",
-    podmanSecretMappingsText: "",
+    podmanSecretMappingsText: DEFAULT_PROVIDER_PODMAN_SECRET_MAPPINGS_TEXT,
     secretsProvidersJson: "",
     anthropicApiKeyRefSource: "env",
     anthropicApiKeyRefProvider: "default",
@@ -31,6 +32,12 @@ export function createInitialDeployFormConfig(): DeployFormConfig {
     openaiApiKeyRefSource: "env",
     openaiApiKeyRefProvider: "default",
     openaiApiKeyRefId: "",
+    openrouterApiKeyRefSource: "env",
+    openrouterApiKeyRefProvider: "default",
+    openrouterApiKeyRefId: "",
+    modelEndpointApiKeyRefSource: "env",
+    modelEndpointApiKeyRefProvider: "default",
+    modelEndpointApiKeyRefId: "",
     telegramBotTokenRefSource: "env",
     telegramBotTokenRefProvider: "default",
     telegramBotTokenRefId: "",
@@ -57,10 +64,13 @@ export function createInitialDeployFormConfig(): DeployFormConfig {
     sandboxSshKnownHostsPath: "",
     anthropicApiKey: "",
     openaiApiKey: "",
+    openrouterApiKey: "",
     anthropicModel: "",
     openaiModel: "",
+    openrouterModel: "",
     anthropicModels: [],
     openaiModels: [],
+    openrouterModels: [],
     agentModel: "",
     vertexAnthropicModel: "",
     vertexAnthropicModels: [],
@@ -105,7 +115,7 @@ function getStringVar(vars: Record<string, unknown>, envKey: string, jsonKey: st
 function decodeSecretRefVar(
   vars: Record<string, unknown>,
   b64Key: string,
-  jsonKey: "anthropicApiKeyRef" | "openaiApiKeyRef" | "telegramBotTokenRef",
+  jsonKey: "anthropicApiKeyRef" | "openaiApiKeyRef" | "openrouterApiKeyRef" | "modelEndpointApiKeyRef" | "telegramBotTokenRef",
 ): SecretRefValue | undefined {
   const decoded = decodeJsonBase64<SecretRefValue>(vars[b64Key] as string | undefined);
   if (decoded) return decoded;
@@ -163,6 +173,7 @@ export function inferSavedInferenceProvider(vars: Record<string, unknown>): Infe
   if (
     savedInferenceProvider === "anthropic"
     || savedInferenceProvider === "openai"
+    || savedInferenceProvider === "openrouter"
     || savedInferenceProvider === "vertex-anthropic"
     || savedInferenceProvider === "vertex-google"
     || savedInferenceProvider === "custom-endpoint"
@@ -172,13 +183,18 @@ export function inferSavedInferenceProvider(vars: Record<string, unknown>): Infe
 
   const anthropicApiKeyRef = decodeSecretRefVar(vars, "ANTHROPIC_API_KEY_REF_B64", "anthropicApiKeyRef");
   const openaiApiKeyRef = decodeSecretRefVar(vars, "OPENAI_API_KEY_REF_B64", "openaiApiKeyRef");
+  const openrouterApiKeyRef = decodeSecretRefVar(vars, "OPENROUTER_API_KEY_REF_B64", "openrouterApiKeyRef");
+  const modelEndpointApiKeyRef = decodeSecretRefVar(vars, "MODEL_ENDPOINT_API_KEY_REF_B64", "modelEndpointApiKeyRef");
   const vertexEnabled = vars.VERTEX_ENABLED === "true" || vars.vertexEnabled === "true";
   if (vertexEnabled) {
     const vertexProvider = vars.VERTEX_PROVIDER || vars.vertexProvider || "anthropic";
     return vertexProvider === "google" ? "vertex-google" : "vertex-anthropic";
   }
-  if (getStringVar(vars, "MODEL_ENDPOINT", "modelEndpoint") || openaiApiKeyRef) {
+  if (getStringVar(vars, "MODEL_ENDPOINT", "modelEndpoint") || modelEndpointApiKeyRef) {
     return "custom-endpoint";
+  }
+  if (getStringVar(vars, "OPENROUTER_API_KEY", "openrouterApiKey") || openrouterApiKeyRef) {
+    return "openrouter";
   }
   if (getStringVar(vars, "ANTHROPIC_API_KEY", "anthropicApiKey") || anthropicApiKeyRef) {
     return "anthropic";
@@ -195,11 +211,16 @@ export function applySavedVarsToConfig(
 ): { config: DeployFormConfig; namespaceManuallyEdited: boolean } {
   const anthropicApiKeyRef = decodeSecretRefVar(vars, "ANTHROPIC_API_KEY_REF_B64", "anthropicApiKeyRef");
   const openaiApiKeyRef = decodeSecretRefVar(vars, "OPENAI_API_KEY_REF_B64", "openaiApiKeyRef");
+  const openrouterApiKeyRef = decodeSecretRefVar(vars, "OPENROUTER_API_KEY_REF_B64", "openrouterApiKeyRef");
+  const modelEndpointApiKeyRef = decodeSecretRefVar(vars, "MODEL_ENDPOINT_API_KEY_REF_B64", "modelEndpointApiKeyRef");
   const telegramBotTokenRef = decodeSecretRefVar(vars, "TELEGRAM_BOT_TOKEN_REF_B64", "telegramBotTokenRef");
   const savedProvidersJson = decodeSecretsProvidersJson(vars);
   const savedPodmanSecretMappingsText = decodePodmanSecretMappingsText(vars);
   const inferredAnthropicRef = anthropicApiKeyRef || inferredEnvSecretRefFromPodmanMappings(savedPodmanSecretMappingsText, "ANTHROPIC_API_KEY");
   const inferredOpenaiRef = openaiApiKeyRef || inferredEnvSecretRefFromPodmanMappings(savedPodmanSecretMappingsText, "OPENAI_API_KEY");
+  const inferredOpenrouterRef = openrouterApiKeyRef || inferredEnvSecretRefFromPodmanMappings(savedPodmanSecretMappingsText, "OPENROUTER_API_KEY");
+  const inferredModelEndpointRef = modelEndpointApiKeyRef
+    || inferredEnvSecretRefFromPodmanMappings(savedPodmanSecretMappingsText, "MODEL_ENDPOINT_API_KEY");
   const explicitNamespace = getStringVar(vars, "K8S_NAMESPACE", "namespace");
   const savedEndpointModels = decodeEndpointModelsVar(vars);
 
@@ -220,6 +241,12 @@ export function applySavedVarsToConfig(
       openaiApiKeyRefSource: inferredOpenaiRef?.source || prev.openaiApiKeyRefSource,
       openaiApiKeyRefProvider: inferredOpenaiRef?.provider || prev.openaiApiKeyRefProvider,
       openaiApiKeyRefId: inferredOpenaiRef?.id || prev.openaiApiKeyRefId,
+      openrouterApiKeyRefSource: inferredOpenrouterRef?.source || prev.openrouterApiKeyRefSource,
+      openrouterApiKeyRefProvider: inferredOpenrouterRef?.provider || prev.openrouterApiKeyRefProvider,
+      openrouterApiKeyRefId: inferredOpenrouterRef?.id || prev.openrouterApiKeyRefId,
+      modelEndpointApiKeyRefSource: inferredModelEndpointRef?.source || prev.modelEndpointApiKeyRefSource,
+      modelEndpointApiKeyRefProvider: inferredModelEndpointRef?.provider || prev.modelEndpointApiKeyRefProvider,
+      modelEndpointApiKeyRefId: inferredModelEndpointRef?.id || prev.modelEndpointApiKeyRefId,
       telegramBotTokenRefSource: telegramBotTokenRef?.source || prev.telegramBotTokenRefSource,
       telegramBotTokenRefProvider: telegramBotTokenRef?.provider || prev.telegramBotTokenRefProvider,
       telegramBotTokenRefId: telegramBotTokenRef?.id || prev.telegramBotTokenRefId,
@@ -300,10 +327,15 @@ export function applySavedVarsToConfig(
       port: getStringVar(vars, "OPENCLAW_PORT", "port") || prev.port,
       anthropicModel: getStringVar(vars, "ANTHROPIC_MODEL", "anthropicModel") || prev.anthropicModel,
       openaiModel: getStringVar(vars, "OPENAI_MODEL", "openaiModel") || prev.openaiModel,
+      openrouterApiKey:
+        getStringVar(vars, "OPENROUTER_API_KEY", "openrouterApiKey") || prev.openrouterApiKey,
+      openrouterModel: getStringVar(vars, "OPENROUTER_MODEL", "openrouterModel") || prev.openrouterModel,
       anthropicModels:
         decodeStringArrayVar(vars, "ANTHROPIC_MODELS_B64", "anthropicModels") || prev.anthropicModels,
       openaiModels:
         decodeStringArrayVar(vars, "OPENAI_MODELS_B64", "openaiModels") || prev.openaiModels,
+      openrouterModels:
+        decodeStringArrayVar(vars, "OPENROUTER_MODELS_B64", "openrouterModels") || prev.openrouterModels,
       agentModel: getStringVar(vars, "AGENT_MODEL", "agentModel") || prev.agentModel,
       vertexAnthropicModel: getStringVar(vars, "VERTEX_ANTHROPIC_MODEL", "vertexAnthropicModel") || prev.vertexAnthropicModel,
       vertexAnthropicModels:
@@ -361,6 +393,8 @@ export function buildDeployRequestBody(params: {
   suggestedNamespace: string;
   anthropicApiKeyRef?: SecretRefValue;
   openaiApiKeyRef?: SecretRefValue;
+  openrouterApiKeyRef?: SecretRefValue;
+  modelEndpointApiKeyRef?: SecretRefValue;
   telegramBotTokenRef?: SecretRefValue;
 }): Record<string, unknown> {
   const {
@@ -371,6 +405,8 @@ export function buildDeployRequestBody(params: {
     suggestedNamespace,
     anthropicApiKeyRef,
     openaiApiKeyRef,
+    openrouterApiKeyRef,
+    modelEndpointApiKeyRef,
     telegramBotTokenRef,
   } = params;
   const vertexProvider = inferenceProvider === "vertex-google" ? "google" : "anthropic";
@@ -388,6 +424,8 @@ export function buildDeployRequestBody(params: {
     secretsProvidersJson: trimToUndefined(config.secretsProvidersJson),
     anthropicApiKeyRef,
     openaiApiKeyRef,
+    openrouterApiKeyRef,
+    modelEndpointApiKeyRef,
     telegramBotTokenRef: config.telegramEnabled ? telegramBotTokenRef : undefined,
     sandboxEnabled: config.sandboxEnabled || undefined,
     sandboxBackend: config.sandboxEnabled ? "ssh" : undefined,
@@ -422,10 +460,13 @@ export function buildDeployRequestBody(params: {
       config.sandboxEnabled ? config.sandboxSshKnownHosts || undefined : undefined,
     anthropicApiKey: !anthropicApiKeyRef ? trimToUndefined(config.anthropicApiKey) : undefined,
     openaiApiKey: !openaiApiKeyRef ? trimToUndefined(config.openaiApiKey) : undefined,
+    openrouterApiKey: !openrouterApiKeyRef ? trimToUndefined(config.openrouterApiKey) : undefined,
     anthropicModel: trimToUndefined(config.anthropicModel),
     anthropicModels: config.anthropicModels.length > 0 ? config.anthropicModels : undefined,
     openaiModel: trimToUndefined(config.openaiModel),
     openaiModels: config.openaiModels.length > 0 ? config.openaiModels : undefined,
+    openrouterModel: trimToUndefined(config.openrouterModel),
+    openrouterModels: config.openrouterModels.length > 0 ? config.openrouterModels : undefined,
     agentModel: config.agentModel || undefined,
     vertexAnthropicModel: trimToUndefined(config.vertexAnthropicModel),
     vertexAnthropicModels: config.vertexAnthropicModels.length > 0 ? config.vertexAnthropicModels : undefined,
@@ -433,7 +474,7 @@ export function buildDeployRequestBody(params: {
     vertexGoogleModels: config.vertexGoogleModels.length > 0 ? config.vertexGoogleModels : undefined,
     openaiCompatibleEndpointsEnabled: config.openaiCompatibleEndpointsEnabled,
     modelEndpoint: trimToUndefined(config.modelEndpoint),
-    modelEndpointApiKey: trimToUndefined(config.modelEndpointApiKey),
+    modelEndpointApiKey: !modelEndpointApiKeyRef ? trimToUndefined(config.modelEndpointApiKey) : undefined,
     modelEndpointModel: trimToUndefined(config.modelEndpointModel),
     modelEndpointModelLabel: trimToUndefined(config.modelEndpointModelLabel),
     modelEndpointModels: config.modelEndpointModels.length > 0 ? config.modelEndpointModels : undefined,
@@ -472,6 +513,8 @@ export function buildEnvFileContent(params: {
   suggestedNamespace: string;
   anthropicApiKeyRef?: SecretRefValue;
   openaiApiKeyRef?: SecretRefValue;
+  openrouterApiKeyRef?: SecretRefValue;
+  modelEndpointApiKeyRef?: SecretRefValue;
   telegramBotTokenRef?: SecretRefValue;
 }): string {
   const {
@@ -481,6 +524,8 @@ export function buildEnvFileContent(params: {
     suggestedNamespace,
     anthropicApiKeyRef,
     openaiApiKeyRef,
+    openrouterApiKeyRef,
+    modelEndpointApiKeyRef,
     telegramBotTokenRef,
   } = params;
 
@@ -498,13 +543,16 @@ export function buildEnvFileContent(params: {
     `INFERENCE_PROVIDER=${inferenceProvider}`,
     `ANTHROPIC_API_KEY=${anthropicApiKeyRef ? "" : config.anthropicApiKey}`,
     `OPENAI_API_KEY=${openaiApiKeyRef ? "" : config.openaiApiKey}`,
+    `OPENROUTER_API_KEY=${openrouterApiKeyRef ? "" : config.openrouterApiKey}`,
     `ANTHROPIC_MODEL=${config.anthropicModel}`,
     `ANTHROPIC_MODELS_B64=${encodeBase64(JSON.stringify(config.anthropicModels))}`,
     `OPENAI_MODEL=${config.openaiModel}`,
     `OPENAI_MODELS_B64=${encodeBase64(JSON.stringify(config.openaiModels))}`,
+    `OPENROUTER_MODEL=${config.openrouterModel}`,
+    `OPENROUTER_MODELS_B64=${encodeBase64(JSON.stringify(config.openrouterModels))}`,
     `OPENAI_COMPATIBLE_ENDPOINTS_ENABLED=${config.openaiCompatibleEndpointsEnabled}`,
     `MODEL_ENDPOINT=${config.modelEndpoint}`,
-    `MODEL_ENDPOINT_API_KEY=${config.modelEndpointApiKey}`,
+    `MODEL_ENDPOINT_API_KEY=${modelEndpointApiKeyRef ? "" : config.modelEndpointApiKey}`,
     `MODEL_ENDPOINT_MODEL=${config.modelEndpointModel}`,
     `MODEL_ENDPOINT_MODEL_LABEL=${config.modelEndpointModelLabel}`,
     `MODEL_ENDPOINT_MODELS_B64=${encodeBase64(JSON.stringify(config.modelEndpointModels))}`,
@@ -570,6 +618,12 @@ export function buildEnvFileContent(params: {
   }
   if (openaiApiKeyRef) {
     lines.push(`OPENAI_API_KEY_REF_B64=${encodeBase64(JSON.stringify(openaiApiKeyRef))}`);
+  }
+  if (openrouterApiKeyRef) {
+    lines.push(`OPENROUTER_API_KEY_REF_B64=${encodeBase64(JSON.stringify(openrouterApiKeyRef))}`);
+  }
+  if (modelEndpointApiKeyRef) {
+    lines.push(`MODEL_ENDPOINT_API_KEY_REF_B64=${encodeBase64(JSON.stringify(modelEndpointApiKeyRef))}`);
   }
   if (telegramBotTokenRef) {
     lines.push(`TELEGRAM_BOT_TOKEN_REF_B64=${encodeBase64(JSON.stringify(telegramBotTokenRef))}`);

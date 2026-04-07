@@ -8,10 +8,19 @@ import {
 
 describe("Multi-model per provider", () => {
   describe("createInitialDeployFormConfig", () => {
-    it("initializes anthropicModels and openaiModels as empty arrays", () => {
+    it("initializes provider model arrays as empty arrays", () => {
       const config = createInitialDeployFormConfig();
       expect(config.anthropicModels).toEqual([]);
       expect(config.openaiModels).toEqual([]);
+      expect(config.openrouterModels).toEqual([]);
+      expect(config.podmanSecretMappingsText).toBe(
+        [
+          "anthropic_api_key=ANTHROPIC_API_KEY",
+          "openai_api_key=OPENAI_API_KEY",
+          "openrouter_api_key=OPENROUTER_API_KEY",
+          "model_endpoint_api_key=MODEL_ENDPOINT_API_KEY",
+        ].join("\n"),
+      );
     });
   });
 
@@ -55,6 +64,20 @@ describe("Multi-model per provider", () => {
         suggestedNamespace: "test-ns",
       });
       expect(body.openaiModels).toEqual(["gpt-5", "gpt-5.3"]);
+    });
+
+    it("includes openrouterModels when non-empty", () => {
+      const config = createInitialDeployFormConfig();
+      config.agentName = "test";
+      config.openrouterModels = ["openrouter/auto", "openrouter/anthropic/claude-sonnet-4-6"];
+      const body = buildDeployRequestBody({
+        mode: "local",
+        inferenceProvider: "openrouter",
+        config,
+        isVertex: false,
+        suggestedNamespace: "test-ns",
+      });
+      expect(body.openrouterModels).toEqual(["openrouter/auto", "openrouter/anthropic/claude-sonnet-4-6"]);
     });
 
     it("excludes openaiModels when empty", () => {
@@ -107,6 +130,23 @@ describe("Multi-model per provider", () => {
       expect(anthropicMatch).toBeTruthy();
       const decoded = JSON.parse(window.atob(anthropicMatch![1]));
       expect(decoded).toEqual(["claude-opus-4-6"]);
+    });
+
+    it("encodes OpenRouter settings into the exported env file", () => {
+      const config = createInitialDeployFormConfig();
+      config.agentName = "test";
+      config.openrouterApiKey = "sk-or-test";
+      config.openrouterModel = "openrouter/auto";
+      config.openrouterModels = ["openrouter/anthropic/claude-sonnet-4-6"];
+      const env = buildEnvFileContent({
+        config,
+        inferenceProvider: "openrouter",
+        isVertex: false,
+        suggestedNamespace: "test-ns",
+      });
+      expect(env).toContain("OPENROUTER_API_KEY=sk-or-test");
+      expect(env).toContain("OPENROUTER_MODEL=openrouter/auto");
+      expect(env).toContain("OPENROUTER_MODELS_B64=");
     });
 
     it("encodes Podman secret mappings as base64", () => {
@@ -186,6 +226,20 @@ describe("Multi-model per provider", () => {
       expect(config.openaiApiKeyRefSource).toBe("env");
       expect(config.openaiApiKeyRefProvider).toBe("default");
       expect(config.openaiApiKeyRefId).toBe("OPENAI_API_KEY");
+    });
+
+    it("infers env/default OpenRouter SecretRefs from Podman secret mappings", () => {
+      const prev = createInitialDeployFormConfig();
+      const mappings = [
+        { secretName: "openrouter_api_key", targetEnv: "OPENROUTER_API_KEY" },
+      ];
+      const vars: Record<string, unknown> = {
+        PODMAN_SECRET_MAPPINGS_B64: window.btoa(JSON.stringify(mappings)),
+      };
+      const { config } = applySavedVarsToConfig(vars, prev);
+      expect(config.openrouterApiKeyRefSource).toBe("env");
+      expect(config.openrouterApiKeyRefProvider).toBe("default");
+      expect(config.openrouterApiKeyRefId).toBe("OPENROUTER_API_KEY");
     });
   });
 });

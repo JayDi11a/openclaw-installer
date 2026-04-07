@@ -3,6 +3,13 @@ export interface PodmanSecretMapping {
   targetEnv: string;
 }
 
+export const DEFAULT_PROVIDER_PODMAN_SECRET_MAPPINGS: PodmanSecretMapping[] = [
+  { secretName: "anthropic_api_key", targetEnv: "ANTHROPIC_API_KEY" },
+  { secretName: "openai_api_key", targetEnv: "OPENAI_API_KEY" },
+  { secretName: "openrouter_api_key", targetEnv: "OPENROUTER_API_KEY" },
+  { secretName: "model_endpoint_api_key", targetEnv: "MODEL_ENDPOINT_API_KEY" },
+];
+
 const SECRET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const ENV_VAR_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 
@@ -92,6 +99,10 @@ export function formatPodmanSecretMappingsText(mappings: PodmanSecretMapping[] |
   }
   return mappings.map((entry) => `${entry.secretName}=${entry.targetEnv}`).join("\n");
 }
+
+export const DEFAULT_PROVIDER_PODMAN_SECRET_MAPPINGS_TEXT = formatPodmanSecretMappingsText(
+  DEFAULT_PROVIDER_PODMAN_SECRET_MAPPINGS,
+);
 
 export function buildPodmanSecretRunArgs(mappings: PodmanSecretMapping[] | undefined): string[] {
   if (!mappings || mappings.length === 0) {

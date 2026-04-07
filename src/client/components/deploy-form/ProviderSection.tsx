@@ -371,6 +371,91 @@ export function ProviderSection({
           </>
         );
 
+      case "openrouter":
+        return (
+          <>
+            <div className="form-group">
+              <label>OpenRouter API Key</label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder={defaults?.hasOpenrouterKey ? "(using key from environment)" : "sk-or-..."}
+                value={config.openrouterApiKey}
+                onChange={(e) => update("openrouterApiKey", e.target.value)}
+              />
+              <div className="hint">
+                {defaults?.hasOpenrouterKey
+                  ? "Detected OPENROUTER_API_KEY from server environment — leave blank to use it"
+                  : "Use a single OpenRouter key to route to many upstream providers."}
+              </div>
+              <div className="hint" style={{ marginTop: "0.35rem" }}>
+                {secretInputPreferenceHint(mode)}
+              </div>
+            </div>
+            <div className="form-group">
+              <label>OpenRouter Model</label>
+              <input
+                type="text"
+                placeholder="e.g., openrouter/auto"
+                value={config.openrouterModel}
+                onChange={(e) => update("openrouterModel", e.target.value)}
+              />
+              <div className="hint">
+                Primary model used as the default in the OpenClaw model picker as <code>openrouter/&lt;route&gt;</code>.
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Additional Models</label>
+              {config.openrouterModels.map((modelId, index) => (
+                <div key={index} style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.25rem" }}>
+                  <input
+                    type="text"
+                    placeholder="e.g., openrouter/anthropic/claude-sonnet-4-6"
+                    value={modelId}
+                    onChange={(e) => {
+                      setConfig((prev) => ({
+                        ...prev,
+                        openrouterModels: prev.openrouterModels.map((m, i) => i === index ? e.target.value : m),
+                      }));
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ padding: "0.25rem 0.5rem" }}
+                    onClick={() => {
+                      setConfig((prev) => ({
+                        ...prev,
+                        openrouterModels: prev.openrouterModels.filter((_, i) => i !== index),
+                      }));
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: "0.85rem", padding: "0.25rem 0.5rem", marginTop: "0.25rem" }}
+                disabled={!config.openrouterModel.trim()}
+                onClick={() => {
+                  setConfig((prev) => ({
+                    ...prev,
+                    openrouterModels: [...prev.openrouterModels, ""],
+                  }));
+                }}
+              >
+                + Add Model
+              </button>
+              <div className="hint">
+                Additional models appear in the OpenClaw model picker as <code>openrouter/&lt;route&gt;</code>.
+              </div>
+            </div>
+          </>
+        );
+
       case "vertex-anthropic":
       case "vertex-google":
         return (

@@ -7,9 +7,11 @@ interface SecretRefsSectionProps {
   mode: string;
   effectiveAnthropicApiKeyRef?: SecretRefValue;
   effectiveOpenaiApiKeyRef?: SecretRefValue;
+  effectiveOpenrouterApiKeyRef?: SecretRefValue;
   effectiveModelEndpointApiKeyRef?: SecretRefValue;
   anthropicApiKeyRefIsInferred?: boolean;
   openaiApiKeyRefIsInferred?: boolean;
+  openrouterApiKeyRefIsInferred?: boolean;
   modelEndpointApiKeyRefIsInferred?: boolean;
 }
 
@@ -23,9 +25,11 @@ export function SecretRefsSection({
   mode,
   effectiveAnthropicApiKeyRef,
   effectiveOpenaiApiKeyRef,
+  effectiveOpenrouterApiKeyRef,
   effectiveModelEndpointApiKeyRef,
   anthropicApiKeyRefIsInferred = false,
   openaiApiKeyRefIsInferred = false,
+  openrouterApiKeyRefIsInferred = false,
   modelEndpointApiKeyRefIsInferred = false,
 }: SecretRefsSectionProps) {
   const isLocal = mode === "local";
@@ -47,13 +51,21 @@ export function SecretRefsSection({
         : "Currently inferred from the deploy form."
     : "Optional override. Leave blank to use the installer-managed SecretRef automatically.";
 
+  const openrouterHint = openrouterApiKeyRefIsInferred
+    ? isLocal
+      ? "Currently inferred from local Podman secret mappings or the local API key field."
+      : isCluster
+        ? "Currently inferred from the installer-managed openclaw-secrets Secret."
+        : "Currently inferred from the deploy form."
+    : "Optional override. Leave blank to use the installer-managed SecretRef automatically.";
+
   const modelEndpointHint = modelEndpointApiKeyRefIsInferred
     ? isLocal
       ? "Currently inferred from local Podman secret mappings or the local endpoint API key field."
       : isCluster
         ? "Currently inferred from the installer-managed openclaw-secrets Secret."
         : "Currently inferred from the deploy form."
-    : "This endpoint API key SecretRef is inferred automatically when the model endpoint key is configured.";
+    : "Optional override. Leave blank to use the installer-managed SecretRef automatically.";
 
   return (
     <details style={{ marginTop: "1.5rem" }}>
@@ -61,7 +73,7 @@ export function SecretRefsSection({
       <div className="card" style={{ marginTop: "0.75rem" }}>
         <div className="hint" style={{ marginBottom: "0.75rem" }}>
           These control how generated OpenClaw config references provider credentials. The installer can infer the
-          built-in Anthropic and OpenAI SecretRefs automatically from your local Podman secret mappings or the managed
+          built-in Anthropic, OpenAI, OpenRouter, and OpenAI-compatible endpoint SecretRefs automatically from your local Podman secret mappings or the managed
           Kubernetes <code>openclaw-secrets</code> Secret. Override them here only when you need a different source,
           provider, or id.
         </div>
@@ -146,11 +158,79 @@ export function SecretRefsSection({
 
         <div className="card" style={{ marginBottom: "1rem" }}>
           <div className="hint" style={{ marginBottom: "0.75rem" }}>
-            Effective Model Endpoint API Key SecretRef: <code>{formatSecretRef(effectiveModelEndpointApiKeyRef)}</code>
+            Effective OpenRouter SecretRef: <code>{formatSecretRef(effectiveOpenrouterApiKeyRef)}</code>
+            {openrouterApiKeyRefIsInferred ? " (inferred)" : ""}
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>OpenRouter SecretRef Source</label>
+              <select
+                value={config.openrouterApiKeyRefSource}
+                onChange={(e) => update("openrouterApiKeyRefSource", e.target.value)}
+              >
+                <option value="env">env</option>
+                <option value="file">file</option>
+                <option value="exec">exec</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>OpenRouter SecretRef Provider</label>
+              <input
+                type="text"
+                placeholder="default"
+                value={config.openrouterApiKeyRefProvider}
+                onChange={(e) => update("openrouterApiKeyRefProvider", e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>OpenRouter SecretRef ID</label>
+            <input
+              type="text"
+              placeholder="OPENROUTER_API_KEY or /providers/openrouter/apiKey or providers/openrouter/apiKey"
+              value={config.openrouterApiKeyRefId}
+              onChange={(e) => update("openrouterApiKeyRefId", e.target.value)}
+            />
+            <div className="hint">{openrouterHint}</div>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <div className="hint" style={{ marginBottom: "0.75rem" }}>
+            Effective OpenAI-Compatible Endpoint SecretRef: <code>{formatSecretRef(effectiveModelEndpointApiKeyRef)}</code>
             {modelEndpointApiKeyRefIsInferred ? " (inferred)" : ""}
           </div>
-          <div className="hint">
-            {modelEndpointHint}
+          <div className="form-row">
+            <div className="form-group">
+              <label>OpenAI-Compatible Endpoint SecretRef Source</label>
+              <select
+                value={config.modelEndpointApiKeyRefSource}
+                onChange={(e) => update("modelEndpointApiKeyRefSource", e.target.value)}
+              >
+                <option value="env">env</option>
+                <option value="file">file</option>
+                <option value="exec">exec</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>OpenAI-Compatible Endpoint SecretRef Provider</label>
+              <input
+                type="text"
+                placeholder="default"
+                value={config.modelEndpointApiKeyRefProvider}
+                onChange={(e) => update("modelEndpointApiKeyRefProvider", e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>OpenAI-Compatible Endpoint SecretRef ID</label>
+            <input
+              type="text"
+              placeholder="MODEL_ENDPOINT_API_KEY or /providers/model-endpoint/apiKey or providers/model-endpoint/apiKey"
+              value={config.modelEndpointApiKeyRefId}
+              onChange={(e) => update("modelEndpointApiKeyRefId", e.target.value)}
+            />
+            <div className="hint">{modelEndpointHint}</div>
           </div>
         </div>
 

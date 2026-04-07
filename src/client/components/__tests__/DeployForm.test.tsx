@@ -17,6 +17,7 @@ function healthJson(deployers: DeployerStub[], overrides: Record<string, unknown
     defaults: {
       hasAnthropicKey: true,
       hasOpenaiKey: false,
+      hasOpenrouterKey: false,
       hasTelegramToken: false,
       telegramAllowFrom: "",
       modelEndpoint: "",
@@ -209,10 +210,31 @@ describe("DeployForm agent name validation (issue #7)", () => {
     expect(screen.getAllByText("Enable Cron Jobs").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Subagent Spawning").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByText("Advanced: Experimental External Secret Providers"));
+    fireEvent.click(screen.getByText("Advanced: SecretRefs"));
 
     expect(await screen.findByText("Anthropic SecretRef Source")).toBeTruthy();
     expect(screen.getByText("OpenAI SecretRef Source")).toBeTruthy();
+    expect(screen.getByText("OpenRouter SecretRef Source")).toBeTruthy();
+    expect(screen.getByText("OpenAI-Compatible Endpoint SecretRef Source")).toBeTruthy();
+  });
+
+  it("shows OpenRouter as an available inference provider", async () => {
+    global.fetch = mockHealthResponse([
+      { mode: "local", title: "This Machine", description: "Run locally", available: true, priority: 0, builtIn: true },
+    ]);
+
+    render(<DeployForm onDeployStarted={() => {}} />);
+
+    await screen.findAllByRole("button", { name: /deploy openclaw/i });
+
+    const providerSelect = screen.getAllByRole("combobox").find((element) =>
+      Array.from((element as HTMLSelectElement).options).some((option) => option.value === "openrouter"),
+    ) as HTMLSelectElement | undefined;
+    expect(providerSelect).toBeTruthy();
+    fireEvent.change(providerSelect!, { target: { value: "openrouter" } });
+
+    expect(await screen.findByText("OpenRouter API Key")).toBeTruthy();
+    expect(screen.getByText("OpenRouter Model")).toBeTruthy();
   });
 
   it("validates Podman secret mapping syntax", async () => {
@@ -274,7 +296,7 @@ describe("DeployForm agent name validation (issue #7)", () => {
 
     await screen.findAllByRole("button", { name: /deploy openclaw/i });
 
-    fireEvent.click(screen.getByText("Advanced: Experimental External Secret Providers"));
+    fireEvent.click(screen.getByText("Advanced: External Secret Providers"));
     const secretProvidersTextarea = screen.getAllByRole("textbox").find((element) =>
       (element as HTMLTextAreaElement).placeholder.includes("{"),
     ) as HTMLTextAreaElement | undefined;

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createServer } from "node:net";
 import { promisify } from "node:util";
+import type { PodmanSecretMapping } from "../../shared/podman-secrets.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -74,6 +75,43 @@ export async function removeVolume(
   } catch {
     // ignore if not found
   }
+}
+
+async function podmanSecretExists(
+  runtime: ContainerRuntime,
+  name: string,
+): Promise<boolean> {
+  if (runtime !== "podman") {
+    return false;
+  }
+  try {
+    await execFileAsync(runtime, ["secret", "exists", name]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function filterExistingPodmanSecretMappings(
+  runtime: ContainerRuntime,
+  mappings: PodmanSecretMapping[] | undefined,
+): Promise<PodmanSecretMapping[] | undefined> {
+  if (!mappings?.length || runtime !== "podman") {
+    return undefined;
+  }
+
+  const checks = await Promise.all(
+    mappings.map(async (mapping) => ({
+      mapping,
+      exists: await podmanSecretExists(runtime, mapping.secretName),
+    })),
+  );
+
+  const filtered = checks
+    .filter((entry) => entry.exists)
+    .map((entry) => entry.mapping);
+
+  return filtered.length > 0 ? filtered : undefined;
 }
 
 export interface DiscoveredVolume {

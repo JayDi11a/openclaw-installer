@@ -159,6 +159,10 @@ export function secretManifest(ns: string, config: DeployConfig, gatewayToken: s
   if (config.openaiApiKey && openaiEnvRefId) {
     data[openaiEnvRefId] = config.openaiApiKey;
   }
+  const openrouterEnvRefId = resolveEnvSecretRefId(config.openrouterApiKeyRef, "OPENROUTER_API_KEY");
+  if (config.openrouterApiKey && openrouterEnvRefId) {
+    data[openrouterEnvRefId] = config.openrouterApiKey;
+  }
   if (config.modelEndpoint) data.MODEL_ENDPOINT = config.modelEndpoint;
   if (config.modelEndpointApiKey) data.MODEL_ENDPOINT_API_KEY = config.modelEndpointApiKey;
   const telegramEnvRefId = resolveEnvSecretRefId(config.telegramBotTokenRef, "TELEGRAM_BOT_TOKEN");
@@ -322,6 +326,7 @@ export function deploymentManifest(
     // natively. LiteLLM only handles Vertex models.
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
     "MODEL_ENDPOINT",
     "MODEL_ENDPOINT_API_KEY",
     "TELEGRAM_BOT_TOKEN",
