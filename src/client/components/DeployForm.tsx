@@ -20,7 +20,8 @@ import {
 } from "./deploy-form/serialization.js";
 import { ProviderSection } from "./deploy-form/ProviderSection.js";
 import { SandboxSection } from "./deploy-form/SandboxSection.js";
-import { SecretProvidersSection } from "./deploy-form/SecretProvidersSection.js";
+import { SecretRefsSection } from "./deploy-form/SecretRefsSection.js";
+import { ExternalSecretProvidersSection } from "./deploy-form/ExternalSecretProvidersSection.js";
 import type {
   DeployFormConfig,
   DeployerInfo,
@@ -184,8 +185,12 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
           if (d.modelEndpoint) {
             setConfig((prev) => ({ ...prev, modelEndpoint: d.modelEndpoint }));
             setInferenceProvider("custom-endpoint");
+          } else if (d.hasOpenrouterKey && !d.hasOpenaiKey && !d.hasAnthropicKey) {
+            setInferenceProvider("openrouter");
           } else if (d.hasOpenaiKey && !d.hasAnthropicKey) {
             setInferenceProvider("openai");
+          } else if (d.hasGoogleKey && !d.hasAnthropicKey && !d.hasOpenaiKey && !d.hasOpenrouterKey) {
+            setInferenceProvider("google");
           }
           if (d.image) {
             setConfig((prev) => ({ ...prev, image: d.image }));
@@ -594,6 +599,9 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
         suggestedNamespace,
         anthropicApiKeyRef,
         openaiApiKeyRef,
+        googleApiKeyRef,
+        openrouterApiKeyRef,
+        modelEndpointApiKeyRef,
         telegramBotTokenRef,
       });
 
@@ -622,6 +630,9 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
       suggestedNamespace,
       anthropicApiKeyRef,
       openaiApiKeyRef,
+      googleApiKeyRef,
+      openrouterApiKeyRef,
+      modelEndpointApiKeyRef,
       telegramBotTokenRef,
     });
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -654,6 +665,21 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
     config.openaiApiKeyRefProvider,
     config.openaiApiKeyRefId,
   );
+  const googleApiKeyRef = buildSecretRef(
+    config.googleApiKeyRefSource,
+    config.googleApiKeyRefProvider,
+    config.googleApiKeyRefId,
+  );
+  const openrouterApiKeyRef = buildSecretRef(
+    config.openrouterApiKeyRefSource,
+    config.openrouterApiKeyRefProvider,
+    config.openrouterApiKeyRefId,
+  );
+  const modelEndpointApiKeyRef = buildSecretRef(
+    config.modelEndpointApiKeyRefSource,
+    config.modelEndpointApiKeyRefProvider,
+    config.modelEndpointApiKeyRefId,
+  );
   const telegramBotTokenRef = buildSecretRef(
     config.telegramBotTokenRefSource,
     config.telegramBotTokenRefProvider,
@@ -662,6 +688,51 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
   const podmanSecretMappingsParse = useMemo(
     () => parsePodmanSecretMappingsText(config.podmanSecretMappingsText),
     [config.podmanSecretMappingsText],
+  );
+  const inferredAnthropicApiKeyRef = !anthropicApiKeyRef
+    ? (
+      podmanSecretMappingsParse.mappings.some((mapping) => mapping.targetEnv === "ANTHROPIC_API_KEY")
+        || Boolean(config.anthropicApiKey.trim())
+    )
+      ? { source: "env", provider: "default", id: "ANTHROPIC_API_KEY" as const }
+      : undefined
+    : undefined;
+  const inferredOpenaiApiKeyRef = !openaiApiKeyRef
+    ? (
+      podmanSecretMappingsParse.mappings.some((mapping) => mapping.targetEnv === "OPENAI_API_KEY")
+        || Boolean(config.openaiApiKey.trim())
+    )
+      ? { source: "env", provider: "default", id: "OPENAI_API_KEY" as const }
+      : undefined
+    : undefined;
+  const inferredGoogleApiKeyRef = !googleApiKeyRef
+    ? (() => {
+      const mappedTargetEnv = podmanSecretMappingsParse.mappings.find((mapping) =>
+        mapping.targetEnv === "GEMINI_API_KEY" || mapping.targetEnv === "GOOGLE_API_KEY",
+      )?.targetEnv;
+      const inferredId = mappedTargetEnv || (config.googleApiKey.trim() ? "GEMINI_API_KEY" : "");
+      return inferredId
+        ? { source: "env", provider: "default", id: inferredId as "GEMINI_API_KEY" | "GOOGLE_API_KEY" }
+        : undefined;
+    })()
+    : undefined;
+  const inferredOpenrouterApiKeyRef = !openrouterApiKeyRef
+    ? (
+      podmanSecretMappingsParse.mappings.some((mapping) => mapping.targetEnv === "OPENROUTER_API_KEY")
+        || Boolean(config.openrouterApiKey.trim())
+    )
+      ? { source: "env", provider: "default", id: "OPENROUTER_API_KEY" as const }
+      : undefined
+    : undefined;
+  const inferredModelEndpointApiKeyRef = !modelEndpointApiKeyRef && (
+    config.modelEndpoint.trim() && !config.modelEndpointApiKey.trim()
+      ? undefined
+      : (
+        podmanSecretMappingsParse.mappings.some((mapping) => mapping.targetEnv === "MODEL_ENDPOINT_API_KEY")
+          || Boolean(config.modelEndpointApiKey.trim())
+      )
+        ? { source: "env", provider: "default", id: "MODEL_ENDPOINT_API_KEY" as const }
+        : undefined
   );
   const agentNameError = validateAgentName(config.agentName);
   const validationErrors: string[] = [];
@@ -697,6 +768,15 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
   }
   if (config.openaiApiKeyRefId.trim() && !openaiApiKeyRef) {
     validationErrors.push("OpenAI SecretRef requires source, provider, and id.");
+  }
+  if (config.googleApiKeyRefId.trim() && !googleApiKeyRef) {
+    validationErrors.push("Google SecretRef requires source, provider, and id.");
+  }
+  if (config.openrouterApiKeyRefId.trim() && !openrouterApiKeyRef) {
+    validationErrors.push("OpenRouter SecretRef requires source, provider, and id.");
+  }
+  if (config.modelEndpointApiKeyRefId.trim() && !modelEndpointApiKeyRef) {
+    validationErrors.push("OpenAI-compatible endpoint SecretRef requires source, provider, and id.");
   }
   if (config.telegramBotTokenRefId.trim() && !telegramBotTokenRef) {
     validationErrors.push("Telegram SecretRef requires source, provider, and id.");
@@ -1116,6 +1196,9 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
                   One mapping per line in the form <code>podman_secret_name=ENV_VAR_NAME</code>.
                   The installer appends the matching <code>--secret</code> flags automatically. Create the Podman secrets separately with <code>podman secret create</code>.
                 </div>
+                <div className="hint" style={{ marginTop: "0.35rem" }}>
+                  Known provider mappings are prefilled for convenience. If a Podman secret does not exist locally, that mapping is skipped.
+                </div>
               </div>
             )}
           </>
@@ -1266,8 +1349,24 @@ export default function DeployForm({ onDeployStarted }: DeployFormProps) {
           setConfig={setConfig}
         />
 
-        <SecretProvidersSection
+        <SecretRefsSection
           config={config}
+          update={update}
+          mode={mode}
+          effectiveAnthropicApiKeyRef={anthropicApiKeyRef || inferredAnthropicApiKeyRef}
+          effectiveOpenaiApiKeyRef={openaiApiKeyRef || inferredOpenaiApiKeyRef}
+          effectiveGoogleApiKeyRef={googleApiKeyRef || inferredGoogleApiKeyRef}
+          effectiveOpenrouterApiKeyRef={openrouterApiKeyRef || inferredOpenrouterApiKeyRef}
+          effectiveModelEndpointApiKeyRef={modelEndpointApiKeyRef || inferredModelEndpointApiKeyRef}
+          anthropicApiKeyRefIsInferred={!anthropicApiKeyRef && Boolean(inferredAnthropicApiKeyRef)}
+          openaiApiKeyRefIsInferred={!openaiApiKeyRef && Boolean(inferredOpenaiApiKeyRef)}
+          googleApiKeyRefIsInferred={!googleApiKeyRef && Boolean(inferredGoogleApiKeyRef)}
+          openrouterApiKeyRefIsInferred={!openrouterApiKeyRef && Boolean(inferredOpenrouterApiKeyRef)}
+          modelEndpointApiKeyRefIsInferred={!modelEndpointApiKeyRef && Boolean(inferredModelEndpointApiKeyRef)}
+        />
+
+        <ExternalSecretProvidersSection
+          secretsProvidersJson={config.secretsProvidersJson}
           update={update}
         />
 

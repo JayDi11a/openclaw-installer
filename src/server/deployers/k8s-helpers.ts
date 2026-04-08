@@ -6,11 +6,17 @@ import { shouldUseOtel, OTEL_HTTP_PORT } from "./otel.js";
 import { buildSandboxConfig } from "./sandbox.js";
 import { buildSandboxToolPolicy } from "./tool-policy.js";
 import { loadAgentSourceBundle, loadAgentSourceMcpServers } from "./agent-source.js";
+import type { AgentSourceBundle } from "./agent-source.js";
 import { normalizeManagedVaultProviders } from "./vault-helper.js";
+import { hasPodmanSecretTarget } from "../../shared/podman-secrets.js";
 
 export const DEFAULT_IMAGE = process.env.OPENCLAW_IMAGE || "ghcr.io/openclaw/openclaw:latest";
 export const DEFAULT_VERTEX_IMAGE = process.env.OPENCLAW_VERTEX_IMAGE || DEFAULT_IMAGE;
 export const CUSTOM_ENDPOINT_PROVIDER = "endpoint";
+export const GOOGLE_PROVIDER = "google";
+export const GOOGLE_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+export const OPENROUTER_PROVIDER = "openrouter";
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 export function defaultImage(config: DeployConfig): string {
   if (config.image) return config.image;
@@ -66,11 +72,17 @@ export function resolveEnvSecretRefId(ref: DeploySecretRef | undefined, fallback
 export function normalizeModelRef(config: DeployConfig, modelRef: string): string {
   const trimmed = modelRef.trim();
   if (!trimmed) return trimmed;
+  if (config.inferenceProvider === OPENROUTER_PROVIDER) {
+    return trimmed.startsWith(`${OPENROUTER_PROVIDER}/`) ? trimmed : `${OPENROUTER_PROVIDER}/${trimmed}`;
+  }
   if (trimmed.includes("/")) return trimmed;
 
   if (config.inferenceProvider === "anthropic") return `anthropic/${trimmed}`;
   if (config.inferenceProvider === "openai") {
     return `openai/${trimmed}`;
+  }
+  if (config.inferenceProvider === GOOGLE_PROVIDER) {
+    return `${GOOGLE_PROVIDER}/${trimmed}`;
   }
   if (config.inferenceProvider === "custom-endpoint") {
     return `${CUSTOM_ENDPOINT_PROVIDER}/${trimmed}`;
@@ -102,28 +114,62 @@ function normalizeProviderModelRef(provider: string, modelRef?: string): string 
   if (!trimmed) {
     return undefined;
   }
+  if (provider === OPENROUTER_PROVIDER) {
+    return trimmed.startsWith(`${OPENROUTER_PROVIDER}/`) ? trimmed : `${OPENROUTER_PROVIDER}/${trimmed}`;
+  }
   return trimmed.includes("/") ? trimmed : `${provider}/${trimmed}`;
+}
+
+function hasLocalProviderSecret(config: DeployConfig, envVar: string): boolean {
+  return config.mode === "local" && hasPodmanSecretTarget(config.podmanSecretMappings, envVar);
 }
 
 export function buildConfiguredAgentModelCatalog(
   config: DeployConfig,
   primaryModelRef: string,
+  sourceBundle?: AgentSourceBundle,
 ): Record<string, { alias: string }> {
   const catalog = buildDefaultAgentModelCatalog(primaryModelRef);
   const configuredModels = [
     {
       ref: normalizeProviderModelRef(
         "anthropic",
-        config.anthropicModel || ((config.anthropicApiKey || config.anthropicApiKeyRef) ? "claude-sonnet-4-6" : undefined),
+        config.anthropicModel
+          || ((config.anthropicApiKey || config.anthropicApiKeyRef || hasLocalProviderSecret(config, "ANTHROPIC_API_KEY"))
+            ? "claude-sonnet-4-6"
+            : undefined),
       ),
       alias: config.anthropicModel?.trim() || "claude-sonnet-4-6",
     },
     {
       ref: normalizeProviderModelRef(
         "openai",
-        config.openaiModel || ((config.openaiApiKey || config.openaiApiKeyRef) ? "gpt-5.4" : undefined),
+        config.openaiModel
+          || ((config.openaiApiKey || config.openaiApiKeyRef || hasLocalProviderSecret(config, "OPENAI_API_KEY"))
+            ? "gpt-5.4"
+            : undefined),
       ),
       alias: config.openaiModel?.trim() || "gpt-5.4",
+    },
+    {
+      ref: normalizeProviderModelRef(
+        GOOGLE_PROVIDER,
+        config.googleModel
+          || ((config.googleApiKey || config.googleApiKeyRef || hasLocalProviderSecret(config, "GEMINI_API_KEY") || hasLocalProviderSecret(config, "GOOGLE_API_KEY"))
+            ? "gemini-3.1-pro-preview"
+            : undefined),
+      ),
+      alias: config.googleModel?.trim() || "gemini-3.1-pro-preview",
+    },
+    {
+      ref: normalizeProviderModelRef(
+        OPENROUTER_PROVIDER,
+        config.openrouterModel
+          || ((config.openrouterApiKey || config.openrouterApiKeyRef || hasLocalProviderSecret(config, "OPENROUTER_API_KEY"))
+            ? "auto"
+            : undefined),
+      ),
+      alias: config.openrouterModel?.trim() || "auto",
     },
     {
       ref: normalizeProviderModelRef(CUSTOM_ENDPOINT_PROVIDER, config.modelEndpointModel),
@@ -149,6 +195,18 @@ export function buildConfiguredAgentModelCatalog(
     const ref = trimmed.includes("/") ? trimmed : `openai/${trimmed}`;
     catalog[ref] = { alias: trimmed };
   }
+  for (const modelId of config.googleModels || []) {
+    const trimmed = modelId.trim();
+    if (!trimmed) continue;
+    const ref = trimmed.includes("/") ? trimmed : `${GOOGLE_PROVIDER}/${trimmed}`;
+    catalog[ref] = { alias: trimmed };
+  }
+  for (const modelId of config.openrouterModels || []) {
+    const trimmed = modelId.trim();
+    if (!trimmed) continue;
+    const ref = trimmed.startsWith(`${OPENROUTER_PROVIDER}/`) ? trimmed : `${OPENROUTER_PROVIDER}/${trimmed}`;
+    catalog[ref] = { alias: trimmed };
+  }
   for (const option of config.modelEndpointModels || []) {
     const id = String(option.id || "").trim();
     if (!id) {
@@ -170,6 +228,31 @@ export function buildConfiguredAgentModelCatalog(
     const ref = shouldUseLitellmProxy(config) ? `litellm/${trimmed}` : `google-vertex/${trimmed}`;
     catalog[ref] = { alias: trimmed };
   }
+  const bundleModelRefs = new Set<string>();
+  const collectModelRefs = (model?: { primary?: string; fallbacks?: string[] }) => {
+    const primary = model?.primary?.trim();
+    if (primary) {
+      bundleModelRefs.add(primary);
+    }
+    for (const fallback of model?.fallbacks || []) {
+      const trimmed = fallback.trim();
+      if (trimmed) {
+        bundleModelRefs.add(trimmed);
+      }
+    }
+  };
+  collectModelRefs(sourceBundle?.mainAgent?.model);
+  for (const entry of sourceBundle?.agents || []) {
+    collectModelRefs(entry.model);
+  }
+  for (const modelRef of bundleModelRefs) {
+    if (detectUnavailableProvider(modelRef, config)) {
+      continue;
+    }
+    if (!(modelRef in catalog)) {
+      catalog[modelRef] = { alias: modelRef.split("/").pop() || modelRef };
+    }
+  }
   return catalog;
 }
 
@@ -189,6 +272,12 @@ export function deriveModel(config: DeployConfig): string {
   }
   if (config.inferenceProvider === "openai") {
     return `openai/${config.openaiModel?.trim() || "gpt-5.4"}`;
+  }
+  if (config.inferenceProvider === GOOGLE_PROVIDER) {
+    return `${GOOGLE_PROVIDER}/${config.googleModel?.trim() || "gemini-3.1-pro-preview"}`;
+  }
+  if (config.inferenceProvider === OPENROUTER_PROVIDER) {
+    return normalizeProviderModelRef(OPENROUTER_PROVIDER, config.openrouterModel) || `${OPENROUTER_PROVIDER}/auto`;
   }
   if (config.inferenceProvider === "custom-endpoint") {
     return config.modelEndpointModel?.trim()
@@ -212,6 +301,8 @@ export function deriveModel(config: DeployConfig): string {
       : "google-vertex/gemini-2.5-pro";
   }
   if (config.openaiApiKey || config.openaiApiKeyRef) return "openai/gpt-5.4";
+  if (config.googleApiKey || config.googleApiKeyRef) return `${GOOGLE_PROVIDER}/gemini-3.1-pro-preview`;
+  if (config.openrouterApiKey || config.openrouterApiKeyRef) return `${OPENROUTER_PROVIDER}/auto`;
   if (config.modelEndpoint) {
     return config.modelEndpointModel?.trim()
       ? normalizeProviderModelRef(CUSTOM_ENDPOINT_PROVIDER, config.modelEndpointModel) || `${CUSTOM_ENDPOINT_PROVIDER}/default`
@@ -284,12 +375,22 @@ export function detectUnavailableProvider(
     case "openai":
       return !config.openaiApiKey && !config.openaiApiKeyRef
         && config.inferenceProvider !== "openai";
+    case GOOGLE_PROVIDER:
+      return !config.googleApiKey && !config.googleApiKeyRef
+        && config.inferenceProvider !== GOOGLE_PROVIDER;
+    case OPENROUTER_PROVIDER:
+      return !config.openrouterApiKey && !config.openrouterApiKeyRef
+        && config.inferenceProvider !== OPENROUTER_PROVIDER;
     case "anthropic-vertex":
       return !config.vertexEnabled
         || (config.vertexProvider !== "anthropic" && config.inferenceProvider !== "vertex-anthropic");
     case "google-vertex":
       return !config.vertexEnabled
         || (config.vertexProvider !== "google" && config.inferenceProvider !== "vertex-google");
+    case "endpoint":
+      return !config.modelEndpoint?.trim();
+    case "litellm":
+      return !shouldUseLitellmProxy(config);
     default:
       return false;
   }
@@ -347,6 +448,22 @@ export function resolveEffectiveOpenAiApiKeyRef(config: DeployConfig): DeploySec
       : undefined;
 }
 
+export function resolveEffectiveGoogleApiKeyRef(config: DeployConfig): DeploySecretRef | undefined {
+  return hasSecretRef(config.googleApiKeyRef)
+    ? config.googleApiKeyRef
+    : shouldAutoEnvRef(config, config.googleApiKeyRef, config.googleApiKey)
+      ? envSecretRef("GEMINI_API_KEY")
+      : undefined;
+}
+
+export function resolveEffectiveOpenRouterApiKeyRef(config: DeployConfig): DeploySecretRef | undefined {
+  return hasSecretRef(config.openrouterApiKeyRef)
+    ? config.openrouterApiKeyRef
+    : shouldAutoEnvRef(config, config.openrouterApiKeyRef, config.openrouterApiKey)
+      ? envSecretRef("OPENROUTER_API_KEY")
+      : undefined;
+}
+
 export function buildManagedAgentAuthProfiles(config: DeployConfig): {
   version: 1;
   profiles: Record<string, Record<string, unknown>>;
@@ -354,6 +471,8 @@ export function buildManagedAgentAuthProfiles(config: DeployConfig): {
   const profiles: Record<string, Record<string, unknown>> = {};
   const anthropicRef = resolveEffectiveAnthropicApiKeyRef(config);
   const openaiRef = resolveEffectiveOpenAiApiKeyRef(config);
+  const googleRef = resolveEffectiveGoogleApiKeyRef(config);
+  const openrouterRef = resolveEffectiveOpenRouterApiKeyRef(config);
 
   if (anthropicRef) {
     profiles["anthropic:default"] = {
@@ -367,6 +486,20 @@ export function buildManagedAgentAuthProfiles(config: DeployConfig): {
       type: "api_key",
       provider: "openai",
       keyRef: cloneSecretRef(openaiRef),
+    };
+  }
+  if (googleRef) {
+    profiles["google:default"] = {
+      type: "api_key",
+      provider: GOOGLE_PROVIDER,
+      keyRef: cloneSecretRef(googleRef),
+    };
+  }
+  if (openrouterRef) {
+    profiles["openrouter:default"] = {
+      type: "api_key",
+      provider: OPENROUTER_PROVIDER,
+      keyRef: cloneSecretRef(openrouterRef),
     };
   }
 
@@ -386,14 +519,72 @@ function attachSecretHandlingConfig(ocConfig: Record<string, unknown>, config: D
   const providersMap = (models.providers as Record<string, unknown> | undefined) || {};
 
   const openaiApiKeyRef = resolveEffectiveOpenAiApiKeyRef(config);
-  const modelEndpointApiKeyRef = config.modelEndpointApiKey ? envSecretRef("MODEL_ENDPOINT_API_KEY") : undefined;
+  const googleApiKeyRef = resolveEffectiveGoogleApiKeyRef(config);
+  const openrouterApiKeyRef = resolveEffectiveOpenRouterApiKeyRef(config);
+  const modelEndpointApiKeyRef = hasSecretRef(config.modelEndpointApiKeyRef)
+    ? config.modelEndpointApiKeyRef
+    : config.modelEndpointApiKey
+      ? envSecretRef("MODEL_ENDPOINT_API_KEY")
+      : undefined;
   if (openaiApiKeyRef) {
     if (openaiApiKeyRef.source === "env" && openaiApiKeyRef.provider === "default") {
       shouldDefineDefaultEnvProvider = true;
     }
   }
+  if (googleApiKeyRef) {
+    if (googleApiKeyRef.source === "env" && googleApiKeyRef.provider === "default") {
+      shouldDefineDefaultEnvProvider = true;
+    }
+    const googleProvider: Record<string, unknown> = {
+      ...((providersMap[GOOGLE_PROVIDER] as Record<string, unknown> | undefined) || {}),
+      baseUrl: GOOGLE_BASE_URL,
+      api: "google-generative-ai",
+      apiKey: cloneSecretRef(googleApiKeyRef),
+    };
+    const googleModels = new Map<string, DeployModelOption>();
+    const addGoogleModel = (modelId?: string) => {
+      const trimmed = String(modelId || "").trim();
+      if (!trimmed) return;
+      const id = trimmed.startsWith(`${GOOGLE_PROVIDER}/`) ? trimmed.slice(`${GOOGLE_PROVIDER}/`.length) : trimmed;
+      googleModels.set(id, { id, name: id });
+    };
+    addGoogleModel(config.googleModel || "gemini-3.1-pro-preview");
+    for (const modelId of config.googleModels || []) {
+      addGoogleModel(modelId);
+    }
+    if (googleModels.size > 0) {
+      googleProvider.models = Array.from(googleModels.values());
+    }
+    providersMap[GOOGLE_PROVIDER] = googleProvider;
+  }
   if (modelEndpointApiKeyRef) {
     shouldDefineDefaultEnvProvider = true;
+  }
+  if (openrouterApiKeyRef) {
+    if (openrouterApiKeyRef.source === "env" && openrouterApiKeyRef.provider === "default") {
+      shouldDefineDefaultEnvProvider = true;
+    }
+    const openrouterProvider: Record<string, unknown> = {
+      ...((providersMap[OPENROUTER_PROVIDER] as Record<string, unknown> | undefined) || {}),
+      baseUrl: OPENROUTER_BASE_URL,
+      api: "openai-completions",
+      apiKey: cloneSecretRef(openrouterApiKeyRef),
+    };
+    const openrouterModels = new Map<string, DeployModelOption>();
+    const addOpenrouterModel = (modelId?: string) => {
+      const trimmed = String(modelId || "").trim();
+      if (!trimmed) return;
+      const id = trimmed.startsWith(`${OPENROUTER_PROVIDER}/`) ? trimmed.slice(`${OPENROUTER_PROVIDER}/`.length) : trimmed;
+      openrouterModels.set(id, { id, name: id });
+    };
+    addOpenrouterModel(config.openrouterModel || "auto");
+    for (const modelId of config.openrouterModels || []) {
+      addOpenrouterModel(modelId);
+    }
+    if (openrouterModels.size > 0) {
+      openrouterProvider.models = Array.from(openrouterModels.values());
+    }
+    providersMap[OPENROUTER_PROVIDER] = openrouterProvider;
   }
   if (config.modelEndpoint?.trim()) {
     const providerApiKeyRef = modelEndpointApiKeyRef || openaiApiKeyRef;
@@ -510,7 +701,7 @@ export function buildOpenClawConfig(config: DeployConfig, gatewayToken: string):
       defaults: {
         workspace: "~/.openclaw/workspace",
         model: buildAgentModelConfig(config, model),
-        models: buildConfiguredAgentModelCatalog(config, model),
+        models: buildConfiguredAgentModelCatalog(config, model, sourceBundle),
         ...(buildSandboxConfig(config) ? { sandbox: buildSandboxConfig(config) } : {}),
       },
       list: [

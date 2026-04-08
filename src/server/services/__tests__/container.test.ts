@@ -90,3 +90,44 @@ describe("discoverContainers", () => {
     await expect(discoverContainers("podman")).resolves.toEqual([]);
   });
 });
+
+describe("filterExistingPodmanSecretMappings", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keeps only Podman secret mappings whose secrets exist", async () => {
+    mockExecFile.mockImplementation((_file, args, cb) => {
+      if (Array.isArray(args) && args[0] === "secret" && args[1] === "exists") {
+        const secretName = args[2];
+        if (secretName === "anthropic_api_key") {
+          cb(null, { stdout: "", stderr: "" });
+          return;
+        }
+        cb(new Error("missing"));
+        return;
+      }
+      cb(new Error(`unexpected args: ${JSON.stringify(args)}`));
+    });
+
+    const { filterExistingPodmanSecretMappings } = await import("../container.js");
+    await expect(
+      filterExistingPodmanSecretMappings("podman", [
+        { secretName: "anthropic_api_key", targetEnv: "ANTHROPIC_API_KEY" },
+        { secretName: "openrouter_api_key", targetEnv: "OPENROUTER_API_KEY" },
+      ]),
+    ).resolves.toEqual([
+      { secretName: "anthropic_api_key", targetEnv: "ANTHROPIC_API_KEY" },
+    ]);
+  });
+
+  it("skips Podman secret mappings entirely when using docker", async () => {
+    const { filterExistingPodmanSecretMappings } = await import("../container.js");
+    await expect(
+      filterExistingPodmanSecretMappings("docker", [
+        { secretName: "anthropic_api_key", targetEnv: "ANTHROPIC_API_KEY" },
+      ]),
+    ).resolves.toBeUndefined();
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
+});

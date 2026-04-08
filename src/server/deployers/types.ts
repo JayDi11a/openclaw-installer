@@ -5,6 +5,8 @@ export type BuiltinDeployMode = "local" | "kubernetes" | "ssh" | "fleet";
 export type InferenceProvider =
   | "anthropic"
   | "openai"
+  | "google"
+  | "openrouter"
   | "vertex-anthropic"
   | "vertex-google"
   | "custom-endpoint";
@@ -32,6 +34,9 @@ export interface DeployConfig {
   secretsProvidersJson?: string;
   anthropicApiKeyRef?: DeploySecretRef;
   openaiApiKeyRef?: DeploySecretRef;
+  googleApiKeyRef?: DeploySecretRef;
+  openrouterApiKeyRef?: DeploySecretRef;
+  modelEndpointApiKeyRef?: DeploySecretRef;
   telegramBotTokenRef?: DeploySecretRef;
   // Sandbox
   sandboxEnabled?: boolean;
@@ -60,10 +65,16 @@ export interface DeployConfig {
   // Model provider (all optional — without them, agents use in-cluster model)
   anthropicApiKey?: string;
   openaiApiKey?: string;
+  googleApiKey?: string;
+  openrouterApiKey?: string;
   anthropicModel?: string;
   openaiModel?: string;
+  googleModel?: string;
+  openrouterModel?: string;
   anthropicModels?: string[];
   openaiModels?: string[];
+  googleModels?: string[];
+  openrouterModels?: string[];
   inferenceProvider?: InferenceProvider;
   agentModel?: string;
   vertexAnthropicModel?: string;

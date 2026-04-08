@@ -74,6 +74,30 @@ describe("model config generation", () => {
     expect(deriveModel(config)).toBe("anthropic/claude-sonnet-4-6");
   });
 
+  it("normalizes OpenRouter model ids whether or not they already include the provider prefix", () => {
+    const config = makeConfig({
+      inferenceProvider: "openrouter",
+      openrouterApiKey: "test-key",
+      openrouterModel: "google/gemma-4-26b-a4b-it",
+    });
+
+    expect(normalizeModelRef(config, "google/gemma-4-26b-a4b-it")).toBe("openrouter/google/gemma-4-26b-a4b-it");
+    expect(normalizeModelRef(config, "openrouter/google/gemma-4-26b-a4b-it")).toBe("openrouter/google/gemma-4-26b-a4b-it");
+    expect(deriveModel(config)).toBe("openrouter/google/gemma-4-26b-a4b-it");
+  });
+
+  it("normalizes Google model ids whether or not they already include the provider prefix", () => {
+    const config = makeConfig({
+      inferenceProvider: "google",
+      googleApiKey: "google-key",
+      googleModel: "gemini-3.1-pro-preview",
+    });
+
+    expect(normalizeModelRef(config, "gemini-3.1-pro-preview")).toBe("google/gemini-3.1-pro-preview");
+    expect(normalizeModelRef(config, "google/gemini-3.1-pro-preview")).toBe("google/gemini-3.1-pro-preview");
+    expect(deriveModel(config)).toBe("google/gemini-3.1-pro-preview");
+  });
+
   it("publishes only the configured default model in the agent catalog", () => {
     const config = makeConfig({
       anthropicApiKey: "test-key",
@@ -100,6 +124,8 @@ describe("model config generation", () => {
       inferenceProvider: "custom-endpoint",
       anthropicApiKey: "anthropic-key",
       openaiApiKey: "openai-key",
+      openrouterApiKey: "openrouter-key",
+      openrouterModel: "openrouter/auto",
       modelEndpoint: "https://example.com/v1",
       modelEndpointModel: "mistral-small-24b-w8a8",
       modelEndpointModelLabel: "Mistral Small 24B",
@@ -116,6 +142,7 @@ describe("model config generation", () => {
     expect(rendered.agents?.defaults?.models).toMatchObject({
       "anthropic/claude-sonnet-4-6": { alias: "claude-sonnet-4-6" },
       "openai/gpt-5.4": { alias: "gpt-5.4" },
+      "openrouter/auto": { alias: "openrouter/auto" },
       "endpoint/mistral-small-24b-w8a8": { alias: "Mistral Small 24B" },
     });
   });
@@ -146,6 +173,9 @@ describe("model config generation", () => {
 
     const rendered = buildOpenClawConfig(config, "gateway-token") as {
       agents?: {
+        defaults?: {
+          models?: Record<string, { alias?: string }>;
+        };
         list?: Array<{
           model?: { primary?: string; fallbacks?: string[] };
         }>;
@@ -155,6 +185,9 @@ describe("model config generation", () => {
     expect(rendered.agents?.list?.[0]?.model).toEqual({
       primary: "anthropic/claude-sonnet-4-6",
       fallbacks: ["endpoint/google/gemma-4-26B-A4B-it"],
+    });
+    expect(rendered.agents?.defaults?.models).toMatchObject({
+      "endpoint/google/gemma-4-26B-A4B-it": { alias: "gemma-4-26B-A4B-it" },
     });
 
     rmSync(dir, { recursive: true, force: true });
@@ -366,7 +399,7 @@ describe("model config generation", () => {
     expect(rendered.secrets?.providers?.vault?.noOutputTimeoutMs).toBe(15000);
   });
 
-  it("builds SecretRef-backed auth profiles for managed Anthropic and OpenAI credentials", () => {
+  it("builds SecretRef-backed auth profiles for managed Anthropic, OpenAI, and Google credentials", () => {
     const config = makeConfig({
       inferenceProvider: "anthropic",
       anthropicApiKeyRef: {
@@ -375,6 +408,7 @@ describe("model config generation", () => {
         id: "providers/anthropic/apiKey",
       },
       openaiApiKey: "sk-openai-runtime",
+      googleApiKey: "google-runtime-key",
     });
 
     expect(buildManagedAgentAuthProfiles(config)).toEqual({
@@ -396,6 +430,15 @@ describe("model config generation", () => {
             source: "env",
             provider: "default",
             id: "OPENAI_API_KEY",
+          },
+        },
+        "google:default": {
+          type: "api_key",
+          provider: "google",
+          keyRef: {
+            source: "env",
+            provider: "default",
+            id: "GEMINI_API_KEY",
           },
         },
       },
@@ -450,6 +493,8 @@ describe("model config generation", () => {
       agentModel: "claude-sonnet-4-6",
       anthropicModel: "claude-opus-4-6",
       openaiModel: "gpt-5",
+      openrouterModel: "auto",
+      openrouterModels: ["google/gemma-4-26b-a4b-it", "openrouter/anthropic/claude-sonnet-4-6"],
       modelEndpoint: "http://localhost:8000/v1",
       modelEndpointModel: "llama-4-scout-17b-16e-w4a16",
       modelEndpointModels: [
@@ -470,8 +515,83 @@ describe("model config generation", () => {
       "anthropic/claude-sonnet-4-6": { alias: "claude-sonnet-4-6" },
       "anthropic/claude-opus-4-6": { alias: "claude-opus-4-6" },
       "openai/gpt-5": { alias: "gpt-5" },
+      "openrouter/auto": { alias: "auto" },
+      "openrouter/google/gemma-4-26b-a4b-it": { alias: "google/gemma-4-26b-a4b-it" },
+      "openrouter/anthropic/claude-sonnet-4-6": { alias: "openrouter/anthropic/claude-sonnet-4-6" },
       "endpoint/llama-4-scout-17b-16e-w4a16": { alias: "Llama 4 Scout 17B" },
       "endpoint/llama-4-maverick-17b": { alias: "Llama 4 Maverick 17B" },
+    });
+  });
+
+  it("configures OpenRouter provider auth and published models", () => {
+    const config = makeConfig({
+      inferenceProvider: "openrouter",
+      openrouterApiKey: "sk-or-test",
+      openrouterModel: "openrouter/auto",
+      openrouterModels: ["openrouter/anthropic/claude-sonnet-4-6"],
+    });
+
+    const rendered = buildOpenClawConfig(config, "gateway-token") as {
+      models?: {
+        providers?: Record<string, {
+          baseUrl?: string;
+          api?: string;
+          apiKey?: unknown;
+          models?: Array<{ id?: string; name?: string }>;
+        }>;
+      };
+      secrets?: { providers?: Record<string, unknown> };
+    };
+
+    expect(rendered.models?.providers?.openrouter?.baseUrl).toBe("https://openrouter.ai/api/v1");
+    expect(rendered.models?.providers?.openrouter?.api).toBe("openai-completions");
+    expect(rendered.models?.providers?.openrouter?.apiKey).toEqual({
+      source: "env",
+      provider: "default",
+      id: "OPENROUTER_API_KEY",
+    });
+    expect(rendered.models?.providers?.openrouter?.models).toEqual([
+      { id: "auto", name: "auto" },
+      { id: "anthropic/claude-sonnet-4-6", name: "anthropic/claude-sonnet-4-6" },
+    ]);
+    expect(rendered.secrets?.providers).toMatchObject({
+      default: { source: "env" },
+    });
+  });
+
+  it("configures Google provider auth and published models", () => {
+    const config = makeConfig({
+      inferenceProvider: "google",
+      googleApiKey: "google-key",
+      googleModel: "gemini-3.1-pro-preview",
+      googleModels: ["gemini-2.5-flash"],
+    });
+
+    const rendered = buildOpenClawConfig(config, "gateway-token") as {
+      models?: {
+        providers?: Record<string, {
+          baseUrl?: string;
+          api?: string;
+          apiKey?: unknown;
+          models?: Array<{ id?: string; name?: string }>;
+        }>;
+      };
+      secrets?: { providers?: Record<string, unknown> };
+    };
+
+    expect(rendered.models?.providers?.google?.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta");
+    expect(rendered.models?.providers?.google?.api).toBe("google-generative-ai");
+    expect(rendered.models?.providers?.google?.apiKey).toEqual({
+      source: "env",
+      provider: "default",
+      id: "GEMINI_API_KEY",
+    });
+    expect(rendered.models?.providers?.google?.models).toEqual([
+      { id: "gemini-3.1-pro-preview", name: "gemini-3.1-pro-preview" },
+      { id: "gemini-2.5-flash", name: "gemini-2.5-flash" },
+    ]);
+    expect(rendered.secrets?.providers).toMatchObject({
+      default: { source: "env" },
     });
   });
 
@@ -733,6 +853,11 @@ describe("detectUnavailableProvider", () => {
     expect(detectUnavailableProvider("openai/gpt-5.4", config)).toBe(true);
   });
 
+  it("detects missing Google provider", () => {
+    const config = makeConfig({ inferenceProvider: "anthropic", anthropicApiKey: "sk-ant" });
+    expect(detectUnavailableProvider("google/gemini-3.1-pro-preview", config)).toBe(true);
+  });
+
   it("detects missing Anthropic provider", () => {
     const config = makeConfig({ inferenceProvider: "openai", openaiApiKey: "sk-oai" });
     expect(detectUnavailableProvider("anthropic/claude-sonnet-4-6", config)).toBe(true);
@@ -763,9 +888,9 @@ describe("detectUnavailableProvider", () => {
     expect(detectUnavailableProvider("anthropic-vertex/claude-sonnet-4-6", config)).toBe(false);
   });
 
-  it("returns false for unknown provider prefixes", () => {
+  it("returns false for unknown provider prefixes and detects missing litellm", () => {
     const config = makeConfig({});
-    expect(detectUnavailableProvider("litellm/my-model", config)).toBe(false);
+    expect(detectUnavailableProvider("litellm/my-model", config)).toBe(true);
     expect(detectUnavailableProvider("custom/model", config)).toBe(false);
   });
 });
