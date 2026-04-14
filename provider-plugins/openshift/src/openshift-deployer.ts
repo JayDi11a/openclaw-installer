@@ -291,6 +291,10 @@ export class OpenShiftDeployer implements Deployer {
     return this.k8s.stop(result, log);
   }
 
+  async redeploy(result: DeployResult, log: LogCallback): Promise<void> {
+    return this.k8s.redeploy(result, log);
+  }
+
   async teardown(result: DeployResult, log: LogCallback): Promise<void> {
     const ns = result.config.namespace || result.containerId || "";
     const core = coreApi();
