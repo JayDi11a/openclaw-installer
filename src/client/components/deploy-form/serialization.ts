@@ -446,7 +446,7 @@ export function buildDeployRequestBody(params: {
     mode,
     inferenceProvider,
     config,
-    isVertex,
+    isVertex: _isVertex,
     suggestedNamespace,
     selectedProviders,
     anthropicApiKeyRef,
@@ -578,7 +578,7 @@ export function buildEnvFileContent(params: {
   const {
     config,
     inferenceProvider,
-    isVertex,
+    isVertex: _isVertex,
     suggestedNamespace,
     selectedProviders,
     anthropicApiKeyRef,

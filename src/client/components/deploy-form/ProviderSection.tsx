@@ -163,10 +163,10 @@ export function ProviderSection({
 
   const allUsedProviders = [inferenceProvider, ...selectedAdditionalProviders];
 
+  const additionalKey = selectedAdditionalProviders.join(",");
   useEffect(() => {
     onSelectedProvidersChange?.(allUsedProviders);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inferenceProvider, selectedAdditionalProviders.join(",")]);
+  }, [inferenceProvider, additionalKey]); // onSelectedProvidersChange is stable (useCallback)
 
   const allAdded = additionalProviders.length >= PROVIDER_OPTIONS.length - 1;
 
