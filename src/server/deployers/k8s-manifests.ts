@@ -451,8 +451,8 @@ export function deploymentManifest(
           initContainers: [
             {
               name: "init-config",
-              image: "registry.access.redhat.com/ubi9-minimal:latest",
-              imagePullPolicy: "IfNotPresent",
+              image: "image-registry.openshift-image-registry.svc:5000/opendatahub/origin-cli:latest",
+              imagePullPolicy: "Always",
               command: ["sh", "-c", initScript],
               resources: {
                 requests: { memory: "64Mi", cpu: "50m" },
