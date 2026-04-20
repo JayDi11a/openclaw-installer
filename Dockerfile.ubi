@@ -1,0 +1,32 @@
+# UBI9-based runtime image for OpenShift builds
+FROM registry.access.redhat.com/ubi9/nodejs-22:latest
+
+USER 0
+
+# Install podman-remote
+RUN dnf install -y podman-remote && dnf clean all && \
+    ln -sf /usr/bin/podman-remote /usr/bin/podman
+
+WORKDIR /app
+
+# Copy package files and install production dependencies
+COPY --chown=1001:0 package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copy pre-built dist directory
+COPY --chown=1001:0 dist ./dist
+
+# Create openclaw installer directory
+RUN mkdir -p /opt/app-root/src/.openclaw/installer && \
+    chown -R 1001:0 /opt/app-root/src && \
+    chmod -R g=u /opt/app-root/src
+
+ENV NODE_ENV=production
+ENV HOME=/opt/app-root/src
+ENV CONTAINER_HOST=unix:///run/podman/podman.sock
+
+USER 1001
+
+EXPOSE 3000
+
+CMD ["node", "dist/server/index.js"]

@@ -1,0 +1,30 @@
+FROM registry.fedoraproject.org/fedora-minimal:41
+WORKDIR /app
+
+USER 0
+
+# Install Node.js 22 and podman-remote 5.x
+RUN microdnf install -y nodejs22 podman-remote && microdnf clean all
+RUN ln -sf /usr/bin/podman-remote /usr/bin/podman
+
+# Create node user (uid 1000) matching openclaw image
+RUN useradd -u 1000 -g 0 -d /home/node -m node && \
+    chown node:0 /app
+
+COPY --chown=node:0 package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --chown=node:0 dist ./dist
+
+# Pre-create state directory with OpenShift-compatible perms
+RUN mkdir -p /home/node/.openclaw/installer && \
+    chown -R node:0 /home/node && \
+    chmod -R g=u /home/node
+
+ENV NODE_ENV=production
+ENV HOME=/home/node
+ENV CONTAINER_HOST=unix:///run/podman/podman.sock
+
+USER node
+
+EXPOSE 3000
+CMD ["node", "dist/server/index.js"]

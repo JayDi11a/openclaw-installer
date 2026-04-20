@@ -2,7 +2,7 @@
 node_modules/
 
 # Build output (rebuilt in container)
-dist/
+# dist/  # Temporarily commented to allow runtime-only build
 
 # Git
 .git/
