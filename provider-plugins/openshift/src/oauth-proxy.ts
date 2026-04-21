@@ -21,6 +21,7 @@ function loadOpenshiftYaml(filename: string, vars: Record<string, string>): stri
 export function oauthProxyContainer(ns: string): k8s.V1Container {
   const yaml = loadOpenshiftYaml("oauth-proxy-container.yaml", {
     __CLIENT_ID__: `system:serviceaccount:${ns}:openclaw-oauth-proxy`,
+    __OAUTH_PROXY_IMAGE__: process.env.OAUTH_PROXY_IMAGE || "image-registry.openshift-image-registry.svc:5000/opendatahub/oauth-proxy:4.14",
   });
   return jsYaml.load(yaml) as k8s.V1Container;
 }
