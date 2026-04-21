@@ -451,7 +451,7 @@ export function deploymentManifest(
           initContainers: [
             {
               name: "init-config",
-              image: "image-registry.openshift-image-registry.svc:5000/opendatahub/origin-cli:latest",
+              image: process.env.OPENCLAW_INIT_IMAGE || "image-registry.openshift-image-registry.svc:5000/opendatahub/origin-cli:latest",
               imagePullPolicy: "Always",
               command: ["sh", "-c", initScript],
               resources: {
